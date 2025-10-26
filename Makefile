@@ -13,19 +13,8 @@ build:
 	@echo "Build complete: ./$(BINARY_NAME)"
 
 build-all:
-	@echo "Building for all platforms..."
-	@mkdir -p $(BUILD_DIR)
-	@echo "Building for Linux (amd64)..."
-	@GOOS=linux GOARCH=amd64 go build -ldflags "-X main.version=$(VERSION)" -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 .
-	@echo "Building for Windows (amd64)..."
-	@GOOS=windows GOARCH=amd64 go build -ldflags "-X main.version=$(VERSION)" -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe .
-	@echo "Building for macOS (amd64)..."
-	@GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.version=$(VERSION)" -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 .
-	@echo "Building for macOS (arm64)..."
-	@GOOS=darwin GOARCH=arm64 go build -ldflags "-X main.version=$(VERSION)" -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-arm64 .
-	@echo "Building for Linux (arm64)..."
-	@GOOS=linux GOARCH=arm64 go build -ldflags "-X main.version=$(VERSION)" -o $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64 .
-	@echo "Build complete! Binaries are in $(BUILD_DIR)/"
+	@echo "Building $(BINARY_NAME) for all platforms..."
+	@cd scripts && ./build.sh
 
 clean:
 	@echo "Cleaning..."
@@ -59,7 +48,7 @@ uninstall:
 
 release:
 	@echo "Creating release packages..."
-	@./release.sh
+	@cd scripts && ./release.sh
 
 help:
 	@echo "Available targets:"

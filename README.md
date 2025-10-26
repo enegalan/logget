@@ -16,7 +16,10 @@ A command-line tool similar to `curl` that extracts browser logs and network dat
 
 ### Pre-built Binaries
 
-Download the appropriate binary for your platform from the releases page.
+Download the appropriate binary for your platform from the [releases page](https://github.com/enegalan/logget/releases):
+
+- **All platforms**: `logget-VERSION.zip` or `logget-VERSION.tar.gz`
+- **Individual platforms**: Platform-specific `.zip` and `.tar.gz` files
 
 ### Build from Source
 
@@ -30,8 +33,11 @@ go build -o logget .
 ### Cross-platform Build
 
 ```bash
-chmod +x build.sh
-./build.sh
+# Using Makefile
+make build-all
+
+# Or using the build script directly
+./scripts/build.sh
 ```
 
 ## Usage
@@ -91,6 +97,43 @@ logget https://example.com --show-logs --header "Authorization: Bearer token" --
 | Network monitoring | ❌ | ✅ |
 | JavaScript execution | ❌ | ✅ |
 | Browser automation | ❌ | ✅ |
+
+## Development
+
+### Available Scripts
+
+The project includes some utility scripts in the `scripts/` directory:
+
+- **`scripts/build.sh`**: Cross-platform compilation for all supported platforms
+- **`scripts/release.sh`**: Create release packages (ZIP and TAR.GZ)
+
+### Makefile Commands
+
+```bash
+make build        # Build for current platform
+make build-all    # Build for all platforms (Linux, Windows, macOS)
+make clean        # Clean build artifacts
+make test         # Run tests
+make deps         # Install dependencies
+make install      # Install binary to system
+make uninstall    # Remove binary from system
+make release      # Create release packages (ZIP and TAR.GZ)
+make help         # Show all available commands
+```
+
+### Creating Releases
+
+```bash
+# Create release packages
+make release
+
+# Or manually
+cd scripts && ./release.sh
+```
+
+This will create:
+- Individual platform packages (`.zip` and `.tar.gz`)
+- Combined packages with all platforms
 
 ## Requirements
 

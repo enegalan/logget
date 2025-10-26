@@ -12,6 +12,10 @@ build/
 # Releases directory
 releases/
 
+# Scripts directory
+scripts/*.tmp
+scripts/*.log
+
 # Test files
 test.html
 
