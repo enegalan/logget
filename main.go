@@ -50,7 +50,7 @@ var (
 	headers     []string
 	versionFlag bool
 	verbose     bool
-	version     string = "1.0.0"
+	version     string = "dev" // Will be set via ldflags during build
 )
 
 func getHostFromURL(url string) string {

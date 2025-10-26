@@ -1,7 +1,7 @@
-.PHONY: build clean test install uninstall deps help
+.PHONY: build clean test install uninstall release deps help
 
 BINARY_NAME=logget
-VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+VERSION=$(shell cat VERSION 2>/dev/null || echo "dev")
 BUILD_DIR=build
 GO_FILES=$(shell find . -name "*.go" -type f)
 
@@ -57,6 +57,10 @@ uninstall:
 		echo "$(BINARY_NAME) is not installed in /usr/local/bin"; \
 	fi
 
+release:
+	@echo "Creating release packages..."
+	@./release.sh
+
 help:
 	@echo "Available targets:"
 	@echo "  build        - Build for current platform"
@@ -66,5 +70,6 @@ help:
 	@echo "  deps         - Install dependencies"
 	@echo "  install      - Install binary to system"
 	@echo "  uninstall    - Remove binary from system"
+	@echo "  release      - Create release packages (ZIP and TAR.GZ)"
 	@echo "  dev          - Build and run example"
 	@echo "  help         - Show this help"

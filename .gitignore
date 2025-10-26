@@ -9,6 +9,9 @@ logget.exe
 # Build directory
 build/
 
+# Releases directory
+releases/
+
 # Test files
 test.html
 

@@ -16,8 +16,8 @@ echo -e "${GREEN}Building logget for multiple platforms...${NC}"
 # Create build directory
 mkdir -p build
 
-# Get version from git or use default
-VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+# Get version from VERSION file or use default
+VERSION=$(cat VERSION 2>/dev/null || echo "dev")
 
 # Build for different platforms
 echo -e "${YELLOW}Building for Linux (amd64)...${NC}"
