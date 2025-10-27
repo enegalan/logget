@@ -54,6 +54,7 @@ var (
 	verbose     bool
 	outputFile  string
 	outputDir   string
+	appendMode  bool
 	version     string = "dev" // Will be set via ldflags during build
 )
 
@@ -132,19 +133,28 @@ func writeOutput(content string) error {
 		} else {
 			filePath = outputFile
 		}
-
-		// Write to file
-		file, err := os.Create(filePath)
+		var file *os.File
+		var err error
+		if appendMode {
+			// Open file in append mode, create if it doesn't exist
+			file, err = os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		} else {
+			// Create new file (overwrite existing)
+			file, err = os.Create(filePath)
+		}
 		if err != nil {
-			return fmt.Errorf("failed to create output file: %v", err)
+			return fmt.Errorf("failed to open output file: %v", err)
 		}
 		defer file.Close()
-
 		_, err = file.WriteString(content)
 		if err != nil {
 			return fmt.Errorf("failed to write to output file: %v", err)
 		}
-		fmt.Fprintf(os.Stderr, "Output written to: %s\n", filePath)
+		if appendMode {
+			fmt.Fprintf(os.Stderr, "Output appended to: %s\n", filePath)
+		} else {
+			fmt.Fprintf(os.Stderr, "Output written to: %s\n", filePath)
+		}
 	} else {
 		// Write to stdout
 		fmt.Print(content)
@@ -170,6 +180,7 @@ func main() {
 	rootCmd.Flags().StringArrayVarP(&headers, "header", "H", []string{}, "Add custom headers (format: 'Key: Value')")
 	rootCmd.Flags().StringVarP(&outputFile, "output", "o", "", "Write to file instead of stdout")
 	rootCmd.Flags().StringVar(&outputDir, "output-dir", "", "Directory to save files in")
+	rootCmd.Flags().BoolVarP(&appendMode, "append", "a", false, "Append to file instead of overwriting")
 	rootCmd.Flags().BoolVarP(&versionFlag, "version", "v", false, "Show version information")
 	rootCmd.Flags().BoolVarP(&verbose, "verbose", "V", false, "Show detailed HTTP protocol information")
 	if err := rootCmd.Execute(); err != nil {

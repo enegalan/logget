@@ -10,6 +10,7 @@ A command-line tool similar to `curl` that extracts browser logs and network dat
 - **No Chrome Required**: Uses embedded Chromium via `go-rod`
 - **JSON Output**: Structured data output for easy parsing
 - **File Output**: Write results to files instead of stdout
+- **Append Mode**: Add output to existing files instead of overwriting
 - **Directory Organization**: Save files to specific directories with automatic directory creation
 - **Custom Headers**: Add custom HTTP headers like curl
 - **Configurable Timeout**: Set custom timeout values
@@ -69,11 +70,20 @@ logget https://example.com --logs --output results.txt
 # Write JSON output to a file
 logget https://example.com --logs --json --output results.json
 
+# Append output to an existing file
+logget https://example.com --logs --output results.txt --append
+
+# Append JSON output to a file
+logget https://example.com --logs --json --output results.json --append
+
 # Save files to a specific directory
 logget https://example.com --logs --output results.txt --output-dir /tmp/logs
 
 # Create nested directories automatically
 logget https://example.com --logs --output data.txt --output-dir results/2024/october
+
+# Append to files in a specific directory
+logget https://example.com --logs --output data.txt --output-dir logs --append
 
 # Set custom timeout
 logget https://example.com --logs --timeout 60
@@ -91,6 +101,7 @@ logget https://example.com --logs --header "Authorization: Bearer token" --heade
 - `--network`, `-N`: Capture and display network requests
 - `--json`, `-J`: Output results in JSON format
 - `--output`, `-o`: Write to file instead of stdout
+- `--append`, `-a`: Append to file instead of overwriting
 - `--output-dir`: Directory to save files in (creates directories automatically)
 - `--timeout`, `-T`: Set timeout in seconds (default: 60)
 - `--wait`, `-W`: Wait time in seconds after page load (default: 3)
@@ -101,11 +112,14 @@ logget https://example.com --logs --header "Authorization: Bearer token" --heade
 
 ### File Output and Directory Organization
 
-The `--output` and `--output-dir` flags allow you to save results to files instead of displaying them on stdout:
+The `--output`, `--output-dir`, and `--append` flags allow you to save results to files instead of displaying them on stdout:
 
 ```bash
-# Save to a specific file
+# Save to a specific file (overwrites existing file)
 logget https://example.com --logs --output results.txt
+
+# Append to an existing file (creates file if it doesn't exist)
+logget https://example.com --logs --output results.txt --append
 
 # Save to a directory (creates the directory if it doesn't exist)
 logget https://example.com --logs --output results.txt --output-dir /tmp/logs
@@ -113,15 +127,21 @@ logget https://example.com --logs --output results.txt --output-dir /tmp/logs
 # Create nested directory structure automatically
 logget https://example.com --logs --output data.txt --output-dir logs/2024/october/27
 
+# Append to files in a specific directory
+logget https://example.com --logs --output data.txt --output-dir logs --append
+
 # Works with JSON output too
 logget https://example.com --logs --json --output data.json --output-dir results
+
+# Append JSON output to existing file
+logget https://example.com --logs --json --output data.json --append
 ```
 
 **Key Features:**
 - **Automatic Directory Creation**: Creates directories and subdirectories as needed
 - **Cross-Platform Paths**: Uses proper path separators for your operating system
 - **Error Handling**: Shows clear error messages if file creation fails
-- **Confirmation**: Displays the full path where the file was saved
+- **Confirmation**: Displays the full path where the file was saved or appended
 
 ## Use Cases
 
@@ -132,7 +152,9 @@ logget https://example.com --logs --json --output data.json --output-dir results
 - **API Testing**: Monitor API calls and responses
 - **Automation**: Save results to files for batch processing and analysis
 - **Logging**: Create organized log files with timestamps and structured data
+- **Continuous Monitoring**: Append multiple runs to the same file for historical tracking
 - **CI/CD Integration**: Generate reports and artifacts for continuous integration pipelines
+- **Data Collection**: Accumulate data from multiple sources into single files
 - **AI Utility**: Allow your AI agents use this command for efficient debugging
 
 ## Comparison with curl
