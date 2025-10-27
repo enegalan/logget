@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -50,6 +51,7 @@ var (
 	wait        int
 	userAgent   string
 	headers     []string
+	cookies     []string
 	versionFlag bool
 	verbose     bool
 	outputFile  string
@@ -118,6 +120,59 @@ func generateDynamicHeaders(url string, userAgent string, customHeaders []string
 	return headers
 }
 
+func setCookies(ctx context.Context, targetURL string, cookies []string) error {
+	if len(cookies) == 0 {
+		return nil
+	}
+	parsedURL, err := url.Parse(targetURL)
+	if err != nil {
+		return fmt.Errorf("failed to parse URL: %v", err)
+	}
+	domain := parsedURL.Host
+	if !strings.Contains(domain, ".") {
+		domain = "." + domain
+	}
+	// Set each cookie
+	for _, cookieStr := range cookies {
+		// Parse cookie string (format: "name=value" or "name=value; domain=example.com")
+		parts := strings.Split(cookieStr, ";")
+		nameValue := strings.TrimSpace(parts[0])
+		if !strings.Contains(nameValue, "=") {
+			return fmt.Errorf("invalid cookie format: %s (expected 'name=value')", cookieStr)
+		}
+		nameValueParts := strings.SplitN(nameValue, "=", 2)
+		name := strings.TrimSpace(nameValueParts[0])
+		value := strings.TrimSpace(nameValueParts[1])
+		// Parse additional attributes
+		cookieDomain := domain
+		path := "/"
+		secure := parsedURL.Scheme == "https"
+		httpOnly := false
+		for i := 1; i < len(parts); i++ {
+			attr := strings.TrimSpace(parts[i])
+			if strings.HasPrefix(strings.ToLower(attr), "domain=") {
+				cookieDomain = strings.TrimSpace(attr[7:])
+			} else if strings.HasPrefix(strings.ToLower(attr), "path=") {
+				path = strings.TrimSpace(attr[5:])
+			} else if strings.ToLower(attr) == "secure" {
+				secure = true
+			} else if strings.ToLower(attr) == "httponly" {
+				httpOnly = true
+			}
+		}
+		// Set cookie using CDP
+		err := chromedp.Run(ctx, cdpnetwork.SetCookie(name, value).
+			WithDomain(cookieDomain).
+			WithPath(path).
+			WithSecure(secure).
+			WithHTTPOnly(httpOnly))
+		if err != nil {
+			return fmt.Errorf("failed to set cookie %s: %v", name, err)
+		}
+	}
+	return nil
+}
+
 func writeOutput(content string) error {
 	if outputFile != "" {
 		// Determine the full file path
@@ -178,6 +233,7 @@ func main() {
 	rootCmd.Flags().IntVarP(&wait, "wait", "W", 3, "Wait time in seconds after page load")
 	rootCmd.Flags().StringVarP(&userAgent, "user-agent", "A", "logget/1.0", "Set User-Agent header")
 	rootCmd.Flags().StringArrayVarP(&headers, "header", "H", []string{}, "Add custom headers (format: 'Key: Value')")
+	rootCmd.Flags().StringArrayVarP(&cookies, "cookie", "C", []string{}, "Add cookies (format: 'name=value' or 'name=value; domain=example.com')")
 	rootCmd.Flags().StringVarP(&outputFile, "output", "o", "", "Write to file instead of stdout")
 	rootCmd.Flags().StringVar(&outputDir, "output-dir", "", "Directory to save files in")
 	rootCmd.Flags().BoolVarP(&appendMode, "append", "a", false, "Append to file instead of overwriting")
@@ -327,6 +383,14 @@ func runLogget(cmd *cobra.Command, args []string) {
 			}
 		}
 	})
+	// Set cookies if provided
+	if len(cookies) > 0 {
+		err := setCookies(ctx, url, cookies)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to set cookies: %v\n", err)
+			os.Exit(1)
+		}
+	}
 	// Navigate to the page
 	tasks := []chromedp.Action{
 		chromedp.Navigate(url),

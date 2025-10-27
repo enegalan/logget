@@ -13,6 +13,7 @@ A command-line tool similar to `curl` that extracts browser logs and network dat
 - **Append Mode**: Add output to existing files instead of overwriting
 - **Directory Organization**: Save files to specific directories with automatic directory creation
 - **Custom Headers**: Add custom HTTP headers like curl
+- **Cookie Support**: Set cookies for authenticated requests
 - **Configurable Timeout**: Set custom timeout values
 
 ## Installation
@@ -93,6 +94,12 @@ logget https://example.com --logs --wait 5
 
 # Add custom headers
 logget https://example.com --logs --header "Authorization: Bearer token" --header "X-Custom: value"
+
+# Set cookies for authenticated requests
+logget https://example.com --logs --cookie "session_id=abc123" --cookie "user_token=xyz789"
+
+# Set cookies with additional attributes
+logget https://example.com --logs --cookie "session_id=abc123; domain=.example.com; secure" --cookie "user_pref=dark_mode; path=/settings"
 ```
 
 ### Options
@@ -107,6 +114,7 @@ logget https://example.com --logs --header "Authorization: Bearer token" --heade
 - `--wait`, `-W`: Wait time in seconds after page load (default: 3)
 - `--user-agent`, `-A`: Set User-Agent header (default: "logget/1.0")
 - `--header`, `-H`: Add custom HTTP headers (format: 'Key: Value')
+- `--cookie`, `-C`: Set cookies (format: 'name=value' or 'name=value; domain=example.com')
 - `--verbose`, `-V`: Show detailed HTTP protocol information
 - `--version`, `-v`: Show version information
 
@@ -163,6 +171,7 @@ logget https://example.com --logs --json --output data.json --append
 |---------|------|--------|
 | HTTP requests | ✅ | ✅ |
 | Custom headers | ✅ | ✅ |
+| Cookie support | ✅ | ✅ |
 | File output | ✅ | ✅ |
 | Directory organization | ✅ | ✅ |
 | Response body | ✅ | ❌ |
