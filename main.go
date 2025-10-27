@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -62,6 +64,13 @@ var (
 	version          string            = "dev" // Will be set via ldflags during build
 	responseHeaders  map[string]string         // Store response headers for verbose mode
 	responseCaptured bool                      // Flag to track if we've captured response headers
+
+	followMode      bool
+	filterPattern   string
+	excludePattern  string
+	refreshInterval int
+
+	skipSSLVerify bool
 )
 
 func getHostFromURL(url string) string {
@@ -78,7 +87,12 @@ func getHostFromURL(url string) string {
 
 // getInitialResponse makes an HTTP request to capture the initial response and redirect information
 func getInitialResponse(targetURL string, userAgent string, customHeaders []string) (string, int, error) {
+	transport := &http.Transport{}
+	if skipSSLVerify {
+		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	}
 	client := &http.Client{
+		Transport: transport,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			// Don't follow redirects - we want to capture the redirect response
 			return http.ErrUseLastResponse
@@ -343,10 +357,210 @@ func writeOutput(content string) error {
 	return nil
 }
 
+func shouldShowLine(line string, filterRegex *regexp.Regexp, excludeRegex *regexp.Regexp) bool {
+	if excludeRegex != nil && excludeRegex.MatchString(line) {
+		return false
+	}
+	if filterRegex != nil && !filterRegex.MatchString(line) {
+		return false
+	}
+	return true
+}
+
+func streamLogsRealTime(ctx context.Context, url string) error {
+	// Create chromedp context
+	opts := append(chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.Flag("headless", true),
+		chromedp.Flag("disable-gpu", true),
+		chromedp.Flag("disable-dev-shm-usage", true),
+		chromedp.Flag("no-sandbox", true),
+		chromedp.Flag("disable-extensions", true),
+		chromedp.Flag("disable-plugins", true),
+		chromedp.Flag("disable-web-security", true),
+		chromedp.Flag("disable-features", "VizDisplayCompositor"),
+		chromedp.Flag("ignore-certificate-errors", true),
+		chromedp.Flag("ignore-ssl-errors", true),
+		chromedp.Flag("allow-running-insecure-content", true),
+		chromedp.Flag("disable-certificate-verification", true),
+	)
+	// SSL bypass flags
+	if skipSSLVerify {
+		opts = append(opts,
+			chromedp.Flag("ignore-certificate-errors-spki-list", true),
+			chromedp.Flag("ignore-ssl-errors", true),
+			chromedp.Flag("ignore-certificate-errors", true),
+		)
+	}
+	allocCtx, cancel := chromedp.NewExecAllocator(ctx, opts...)
+	defer cancel()
+	ctx, cancel = chromedp.NewContext(allocCtx)
+	defer cancel()
+	// Enable domains
+	if err := chromedp.Run(ctx, cdplog.Enable()); err != nil {
+		return fmt.Errorf("failed to enable log domain: %v", err)
+	}
+	if err := chromedp.Run(ctx, runtime.Enable()); err != nil {
+		return fmt.Errorf("failed to enable runtime domain: %v", err)
+	}
+	if showNetwork {
+		if err := chromedp.Run(ctx, cdpnetwork.Enable()); err != nil {
+			return fmt.Errorf("failed to enable network domain: %v", err)
+		}
+	}
+	// Set up event listeners
+	chromedp.ListenTarget(ctx, func(ev interface{}) {
+		// Browser logs
+		if ev, ok := ev.(*cdplog.EventEntryAdded); ok {
+			logEntry := LogEntry{
+				Level:   ev.Entry.Level.String(),
+				Message: ev.Entry.Text,
+				Time:    time.Now(),
+				Source:  "browser",
+			}
+			outputLogEntry(logEntry)
+		}
+		// JavaScript console logs
+		if ev, ok := ev.(*runtime.EventConsoleAPICalled); ok {
+			var message string
+			for _, arg := range ev.Args {
+				if arg.Value != nil {
+					var str string
+					if err := json.Unmarshal(arg.Value, &str); err == nil {
+						message += str + " "
+					} else {
+						message += fmt.Sprintf("%v ", arg.Value)
+					}
+				}
+			}
+			logEntry := LogEntry{
+				Level:   ev.Type.String(),
+				Message: strings.TrimSpace(message),
+				Time:    time.Now(),
+				Source:  "console",
+			}
+			outputLogEntry(logEntry)
+		}
+		// Network events
+		if showNetwork {
+			if ev, ok := ev.(*cdpnetwork.EventResponseReceived); ok {
+				response := ev.Response
+				headers := make(map[string]string)
+				for name, value := range response.Headers {
+					if str, ok := value.(string); ok {
+						headers[name] = str
+					} else {
+						headers[name] = fmt.Sprintf("%v", value)
+					}
+				}
+				networkEntry := NetworkEntry{
+					URL:       response.URL,
+					Method:    "GET",
+					Status:    int(response.Status),
+					Headers:   headers,
+					Timestamp: time.Now(),
+					Type:      string(response.MimeType),
+					Size:      int64(response.EncodedDataLength),
+				}
+				outputNetworkEntry(networkEntry)
+			}
+		}
+	})
+	// Set cookies if provided
+	if len(cookies) > 0 {
+		if err := setCookies(ctx, url, cookies); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to set cookies: %v\n", err)
+		}
+	}
+	// Navigate to the page
+	if err := chromedp.Run(ctx, chromedp.Navigate(url)); err != nil {
+		return fmt.Errorf("failed to navigate to %s: %v", url, err)
+	}
+	// Keep streaming until context is cancelled
+	<-ctx.Done()
+	return nil
+}
+
+func outputLogEntry(logEntry LogEntry) {
+	var filterRegex *regexp.Regexp
+	var excludeRegex *regexp.Regexp
+	var err error
+	if filterPattern != "" {
+		filterRegex, err = regexp.Compile(filterPattern)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Invalid filter pattern: %v\n", err)
+			return
+		}
+	}
+	if excludePattern != "" {
+		excludeRegex, err = regexp.Compile(excludePattern)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Invalid exclude pattern: %v\n", err)
+			return
+		}
+	}
+	if !shouldShowLine(logEntry.Message, filterRegex, excludeRegex) {
+		return
+	}
+	var output string
+	if jsonOutput {
+		jsonData, _ := json.Marshal(logEntry)
+		output = string(jsonData) + "\n"
+	} else {
+		output = fmt.Sprintf("[%s] %s: %s\n",
+			logEntry.Time.Format("15:04:05"),
+			strings.ToUpper(logEntry.Level),
+			logEntry.Message)
+	}
+	if outputFile != "" {
+		writeOutput(output)
+	} else {
+		fmt.Print(output)
+	}
+}
+
+func outputNetworkEntry(networkEntry NetworkEntry) {
+	var filterRegex *regexp.Regexp
+	var excludeRegex *regexp.Regexp
+	var err error
+	if filterPattern != "" {
+		filterRegex, err = regexp.Compile(filterPattern)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Invalid filter pattern: %v\n", err)
+			return
+		}
+	}
+	if excludePattern != "" {
+		excludeRegex, err = regexp.Compile(excludePattern)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Invalid exclude pattern: %v\n", err)
+			return
+		}
+	}
+	if !shouldShowLine(networkEntry.URL, filterRegex, excludeRegex) {
+		return
+	}
+	var output string
+	if jsonOutput {
+		jsonData, _ := json.Marshal(networkEntry)
+		output = string(jsonData) + "\n"
+	} else {
+		output = fmt.Sprintf("[%s] %s %s -> %d\n",
+			networkEntry.Timestamp.Format("15:04:05"),
+			networkEntry.Method,
+			networkEntry.URL,
+			networkEntry.Status)
+	}
+	if outputFile != "" {
+		writeOutput(output)
+	} else {
+		fmt.Print(output)
+	}
+}
+
 func main() {
 	log.SetOutput(io.Discard)
 	var rootCmd = &cobra.Command{
-		Use:   "logget <url>",
+		Use:   "logget [flags] <url>",
 		Short: "Extract logs and network data from web pages",
 		Long:  ``,
 		Args:  cobra.ArbitraryArgs,
@@ -365,6 +579,11 @@ func main() {
 	rootCmd.Flags().BoolVarP(&appendMode, "append", "a", false, "Append to file instead of overwriting")
 	rootCmd.Flags().BoolVarP(&versionFlag, "version", "v", false, "Show version information")
 	rootCmd.Flags().BoolVarP(&verbose, "verbose", "V", false, "Show detailed HTTP protocol information")
+	rootCmd.Flags().BoolVarP(&followMode, "follow", "f", false, "Stream logs and network requests in real-time")
+	rootCmd.Flags().StringVar(&filterPattern, "filter", "", "Show only logs/requests matching this regex pattern")
+	rootCmd.Flags().StringVar(&excludePattern, "exclude", "", "Exclude logs/requests matching this regex pattern")
+	rootCmd.Flags().IntVar(&refreshInterval, "refresh", 100, "Refresh interval in milliseconds for real-time streaming")
+	rootCmd.Flags().BoolVarP(&skipSSLVerify, "insecure", "k", false, "Skip SSL certificate verification (useful for self-signed certificates)")
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -379,16 +598,20 @@ func runLogget(cmd *cobra.Command, args []string) {
 	}
 	if len(args) == 0 {
 		fmt.Fprintf(os.Stderr, "Error: URL is required\n")
-		fmt.Fprintf(os.Stderr, "Usage: logget <url> [flags]\n")
+		fmt.Fprintf(os.Stderr, "Usage: logget [flags] <url>\n")
 		fmt.Fprintf(os.Stderr, "Use 'logget --help' for more information\n")
 		os.Exit(1)
 	}
+	url := args[0]
+	processURL(url)
+}
+
+func processURL(url string) {
 	// Quick check: if no data collection flags are specified, show help immediately
-	if !showLogs && !showNetwork && !verbose && !jsonOutput {
+	if !showLogs && !showNetwork && !verbose && !jsonOutput && !followMode {
 		fmt.Println("logget: try 'logget --help' or 'logget -h' for more information")
 		os.Exit(0)
 	}
-	url := args[0]
 	// Validate URL
 	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
 		url = "https://" + url
@@ -411,12 +634,19 @@ func runLogget(cmd *cobra.Command, args []string) {
 		chromedp.Flag("allow-running-insecure-content", true),
 		chromedp.Flag("disable-certificate-verification", true),
 	)
+	// SSL bypass flags
+	if skipSSLVerify {
+		opts = append(opts,
+			chromedp.Flag("ignore-certificate-errors-spki-list", true),
+			chromedp.Flag("ignore-ssl-errors", true),
+			chromedp.Flag("ignore-certificate-errors", true),
+		)
+	}
 	allocCtx, cancel := chromedp.NewExecAllocator(ctx, opts...)
 	defer cancel()
 	// Create context
 	ctx, cancel = chromedp.NewContext(allocCtx)
 	defer cancel()
-
 	// Get initial response to capture redirect information
 	initialProtocol, initialStatusCode, err := getInitialResponse(url, userAgent, headers)
 	if err != nil {
@@ -425,7 +655,6 @@ func runLogget(cmd *cobra.Command, args []string) {
 		initialProtocol = "HTTP/1.1"
 		initialStatusCode = 200
 	}
-
 	// Collect logs and network data
 	var logs []LogEntry
 	var network []NetworkEntry
@@ -530,6 +759,15 @@ func runLogget(cmd *cobra.Command, args []string) {
 		}
 	}
 	// Navigate to the page
+	if followMode {
+		fmt.Fprintf(os.Stderr, "Streaming logs from %s (Press Ctrl+C to stop)\n", url)
+		err = streamLogsRealTime(ctx, url)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error streaming logs: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
 	tasks := []chromedp.Action{
 		chromedp.Navigate(url),
 		chromedp.Sleep(time.Duration(wait) * time.Second), // Wait for the page to load

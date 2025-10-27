@@ -47,59 +47,101 @@ make build-all
 ## Usage
 
 ```bash
-logget <url> [flags]
+logget [flags] <url>
 ```
 
 ### Basic Examples
 
 ```bash
 # Show console logs
-logget https://example.com --logs
+logget --logs https://example.com
 
 # Show network requests
-logget https://example.com --network
+logget --network https://example.com
 
 # Show both logs and network data
-logget https://example.com --logs --network
+logget --logs --network https://example.com
 
 # Output in JSON format
-logget https://example.com --logs --network --json
+logget --logs --network --json https://example.com
 
 # Write output to a file
-logget https://example.com --logs --output results.txt
+logget --logs --output results.txt https://example.com
 
 # Write JSON output to a file
-logget https://example.com --logs --json --output results.json
+logget --logs --json --output results.json https://example.com
 
 # Append output to an existing file
-logget https://example.com --logs --output results.txt --append
+logget --logs --output results.txt --append https://example.com
 
 # Append JSON output to a file
-logget https://example.com --logs --json --output results.json --append
+logget --logs --json --output results.json --append https://example.com
 
 # Save files to a specific directory
-logget https://example.com --logs --output results.txt --output-dir /tmp/logs
+logget --logs --output results.txt --output-dir /tmp/logs https://example.com
 
 # Create nested directories automatically
-logget https://example.com --logs --output data.txt --output-dir results/2024/october
+logget --logs --output data.txt --output-dir results/2024/october https://example.com
 
 # Append to files in a specific directory
-logget https://example.com --logs --output data.txt --output-dir logs --append
+logget --logs --output data.txt --output-dir logs --append https://example.com
 
 # Set custom timeout
-logget https://example.com --logs --timeout 60
+logget --logs --timeout 60 https://example.com
 
 # Set custom wait time after page load
-logget https://example.com --logs --wait 5
+logget --logs --wait 5 https://example.com
 
 # Add custom headers
-logget https://example.com --logs --header "Authorization: Bearer token" --header "X-Custom: value"
+logget --logs --header "Authorization: Bearer token" --header "X-Custom: value" https://example.com
 
 # Set cookies for authenticated requests
-logget https://example.com --logs --cookie "session_id=abc123" --cookie "user_token=xyz789"
+logget --logs --cookie "session_id=abc123" --cookie "user_token=xyz789" https://example.com
 
 # Set cookies with additional attributes
-logget https://example.com --logs --cookie "session_id=abc123; domain=.example.com; secure" --cookie "user_pref=dark_mode; path=/settings"
+logget --logs --cookie "session_id=abc123; domain=.example.com; secure" --cookie "user_pref=dark_mode; path=/settings" https://example.com
+```
+
+### Real-time Streaming Examples
+
+```bash
+# Stream browser logs from a URL in real-time
+logget -f --logs https://example.com
+
+# Stream network requests from a URL
+logget -f --network https://example.com
+
+# Stream both logs and network data
+logget -f --logs --network https://example.com
+
+# Stream with custom refresh interval (default: 100ms)
+logget -f --logs --refresh 500 https://example.com
+
+# Stream to a file
+logget -f --logs --output stream.log https://example.com
+
+# Stream with JSON output
+logget -f --logs --json https://example.com
+
+# Stream with custom headers and cookies
+logget -f --logs --header "Authorization: Bearer token" --cookie "session=abc123" https://example.com
+
+# Stream with filtering for ERROR messages only
+logget -f --logs --filter "ERROR" https://example.com
+
+# Stream with filtering for multiple patterns
+logget -f --logs --filter "ERROR|WARN" https://example.com
+
+# Stream with exclusion patterns
+logget -f --logs --exclude "DEBUG" https://example.com
+
+# Stream with filtering and JSON output
+logget -f --logs --filter "ERROR|WARN" --json --output errors.json https://example.com
+
+# Skip SSL verification for local development servers
+logget -k --logs https://0.0.0.0:3030
+logget -k --network https://localhost:8080
+logget -k -f --logs --filter "ERROR" https://127.0.0.1:3000
 ```
 
 ### Options
@@ -117,6 +159,11 @@ logget https://example.com --logs --cookie "session_id=abc123; domain=.example.c
 - `--cookie`, `-C`: Set cookies (format: 'name=value' or 'name=value; domain=example.com')
 - `--verbose`, `-V`: Show detailed HTTP protocol information
 - `--version`, `-v`: Show version information
+- `--follow`, `-f`: Stream logs and network requests in real-time
+- `--filter`: Show only logs/requests matching this regex pattern
+- `--exclude`: Exclude logs/requests matching this regex pattern
+- `--refresh`: Refresh interval in milliseconds for real-time streaming (default: 100)
+- `--insecure`, `-k`: Skip SSL certificate verification (useful for self-signed certificates)
 
 ### File Output and Directory Organization
 
@@ -164,6 +211,7 @@ logget https://example.com --logs --json --output data.json --append
 - **CI/CD Integration**: Generate reports and artifacts for continuous integration pipelines
 - **Data Collection**: Accumulate data from multiple sources into single files
 - **AI Utility**: Allow your AI agents use this command for efficient debugging
+- **Real-time Monitoring**: Stream logs from web applications as they happen
 
 ## Comparison with curl
 
@@ -172,13 +220,12 @@ logget https://example.com --logs --json --output data.json --append
 | HTTP requests | ✅ | ✅ |
 | Custom headers | ✅ | ✅ |
 | Cookie support | ✅ | ✅ |
-| File output | ✅ | ✅ |
-| Directory organization | ✅ | ✅ |
 | Response body | ✅ | ❌ |
 | Console logs | ❌ | ✅ |
 | Network monitoring | ❌ | ✅ |
 | JavaScript execution | ❌ | ✅ |
 | Browser automation | ❌ | ✅ |
+| Real-time streaming | ❌ | ✅ |
 
 ## Development
 
