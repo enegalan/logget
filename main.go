@@ -46,6 +46,7 @@ var (
 	showNetwork bool
 	jsonOutput  bool
 	timeout     int
+	wait        int
 	userAgent   string
 	headers     []string
 	versionFlag bool
@@ -126,6 +127,7 @@ func main() {
 	rootCmd.Flags().BoolVarP(&showNetwork, "network", "N", false, "Show network requests")
 	rootCmd.Flags().BoolVarP(&jsonOutput, "json", "J", false, "Output in JSON format")
 	rootCmd.Flags().IntVarP(&timeout, "timeout", "T", 60, "Timeout in seconds")
+	rootCmd.Flags().IntVarP(&wait, "wait", "W", 3, "Wait time in seconds after page load")
 	rootCmd.Flags().StringVarP(&userAgent, "user-agent", "U", "logget/1.0", "Set User-Agent header")
 	rootCmd.Flags().StringArrayVarP(&headers, "header", "H", []string{}, "Add custom headers (format: 'Key: Value')")
 	rootCmd.Flags().BoolVarP(&versionFlag, "version", "v", false, "Show version information")
@@ -277,7 +279,7 @@ func runLogget(cmd *cobra.Command, args []string) {
 	// Navigate to the page
 	tasks := []chromedp.Action{
 		chromedp.Navigate(url),
-		chromedp.Sleep(3 * time.Second),
+		chromedp.Sleep(time.Duration(wait) * time.Second), // Wait for the page to load
 	}
 	// Execute tasks
 	err := chromedp.Run(ctx, tasks...)

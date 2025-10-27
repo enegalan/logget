@@ -64,6 +64,9 @@ logget https://example.com --show-logs --show-network --json
 # Set custom timeout
 logget https://example.com --show-logs --timeout 60
 
+# Set custom wait time after page load
+logget https://example.com --show-logs --wait 5
+
 # Add custom headers
 logget https://example.com --show-logs --header "Authorization: Bearer token" --header "X-Custom: value"
 ```
@@ -73,7 +76,8 @@ logget https://example.com --show-logs --header "Authorization: Bearer token" --
 - `--show-logs`: Capture and display console logs
 - `--show-network`: Capture and display network requests
 - `--json`: Output results in JSON format
-- `--timeout SECONDS`: Set timeout in seconds (default: 30)
+- `--timeout SECONDS`: Set timeout in seconds (default: 60)
+- `--wait SECONDS`: Wait time in seconds after page load (default: 3)
 - `--user-agent STRING`: Set User-Agent header (default: "logget/1.0")
 - `--header "Key: Value"`: Add custom HTTP headers
 
