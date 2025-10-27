@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chromedp/cdproto/cdp"
 	cdplog "github.com/chromedp/cdproto/log"
 	cdpnetwork "github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/runtime"
@@ -86,37 +87,103 @@ func getPathFromURL(url string) string {
 }
 
 func generateDynamicHeaders(url string, userAgent string, customHeaders []string) []string {
-	var headers []string
-	// Basic headers that are always present
-	headers = append(headers, fmt.Sprintf("Host: %s", getHostFromURL(url)))
-	headers = append(headers, fmt.Sprintf("User-Agent: %s", userAgent))
-	// Accept header based on what we're requesting
-	if strings.Contains(url, ".json") || strings.Contains(url, "/api/") || strings.Contains(url, "api.") {
-		headers = append(headers, "Accept: application/json,text/plain,*/*")
-	} else if strings.Contains(url, ".css") {
-		headers = append(headers, "Accept: text/css,*/*;q=0.1")
-	} else if strings.Contains(url, ".js") {
-		headers = append(headers, "Accept: */*")
-	} else {
-		headers = append(headers, "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
+	customHeaderMap := make(map[string]string)
+	for _, header := range customHeaders {
+		if colonIndex := strings.Index(header, ":"); colonIndex != -1 {
+			key := strings.TrimSpace(header[:colonIndex])
+			value := strings.TrimSpace(header[colonIndex+1:])
+			customHeaderMap[strings.ToLower(key)] = value
+		}
 	}
-	// Language based on system locale (simplified)
-	headers = append(headers, "Accept-Language: en-US,en;q=0.5")
-	// Encoding based on what the browser supports
-	headers = append(headers, "Accept-Encoding: gzip, deflate")
-	// Connection type
-	headers = append(headers, "Connection: keep-alive")
-	// Security headers for HTTPS
+	var headers []string
+	headers = append(headers, fmt.Sprintf("Host: %s", getHostFromURL(url)))
+	// User-Agent
+	if customUA, exists := customHeaderMap["user-agent"]; exists {
+		headers = append(headers, fmt.Sprintf("User-Agent: %s", customUA))
+	} else {
+		headers = append(headers, fmt.Sprintf("User-Agent: %s", userAgent))
+	}
+	// Accept
+	if customAccept, exists := customHeaderMap["accept"]; exists {
+		headers = append(headers, fmt.Sprintf("Accept: %s", customAccept))
+	} else {
+		// Inherit Accept header based on the URL
+		if strings.Contains(url, ".json") || strings.Contains(url, "/api/") || strings.Contains(url, "api.") {
+			headers = append(headers, "Accept: application/json,text/plain,*/*")
+		} else if strings.Contains(url, ".css") {
+			headers = append(headers, "Accept: text/css,*/*;q=0.1")
+		} else {
+			headers = append(headers, "Accept: */*")
+		}
+	}
+	// Accept-Language
+	if customLang, exists := customHeaderMap["accept-language"]; exists {
+		headers = append(headers, fmt.Sprintf("Accept-Language: %s", customLang))
+	} else {
+		headers = append(headers, "Accept-Language: en-US,en;q=0.5")
+	}
+	// Accept-Encoding
+	if customEncoding, exists := customHeaderMap["accept-encoding"]; exists {
+		headers = append(headers, fmt.Sprintf("Accept-Encoding: %s", customEncoding))
+	} else {
+		headers = append(headers, "Accept-Encoding: gzip, deflate")
+	}
+	// Connection
+	if customConn, exists := customHeaderMap["connection"]; exists {
+		headers = append(headers, fmt.Sprintf("Connection: %s", customConn))
+	} else {
+		headers = append(headers, "Connection: keep-alive")
+	}
+	// Security headers
 	if strings.HasPrefix(url, "https://") {
-		headers = append(headers, "Upgrade-Insecure-Requests: 1")
-		headers = append(headers, "Sec-Fetch-Dest: document")
-		headers = append(headers, "Sec-Fetch-Mode: navigate")
-		headers = append(headers, "Sec-Fetch-Site: none")
+		if customUpgrade, exists := customHeaderMap["upgrade-insecure-requests"]; exists {
+			headers = append(headers, fmt.Sprintf("Upgrade-Insecure-Requests: %s", customUpgrade))
+		} else {
+			headers = append(headers, "Upgrade-Insecure-Requests: 1")
+		}
+		if customDest, exists := customHeaderMap["sec-fetch-dest"]; exists {
+			headers = append(headers, fmt.Sprintf("Sec-Fetch-Dest: %s", customDest))
+		} else {
+			headers = append(headers, "Sec-Fetch-Dest: document")
+		}
+		if customMode, exists := customHeaderMap["sec-fetch-mode"]; exists {
+			headers = append(headers, fmt.Sprintf("Sec-Fetch-Mode: %s", customMode))
+		} else {
+			headers = append(headers, "Sec-Fetch-Mode: navigate")
+		}
+		if customSite, exists := customHeaderMap["sec-fetch-site"]; exists {
+			headers = append(headers, fmt.Sprintf("Sec-Fetch-Site: %s", customSite))
+		} else {
+			headers = append(headers, "Sec-Fetch-Site: none")
+		}
 	}
 	// Cache control
-	headers = append(headers, "Cache-Control: max-age=0")
-	// Add custom headers
-	headers = append(headers, customHeaders...)
+	if customCache, exists := customHeaderMap["cache-control"]; exists {
+		headers = append(headers, fmt.Sprintf("Cache-Control: %s", customCache))
+	} else {
+		headers = append(headers, "Cache-Control: max-age=0")
+	}
+	// Add remaining custom headers
+	alreadyProcessedHeaders := map[string]bool{
+		"user-agent":                true,
+		"accept":                    true,
+		"accept-language":           true,
+		"accept-encoding":           true,
+		"connection":                true,
+		"upgrade-insecure-requests": true,
+		"sec-fetch-dest":            true,
+		"sec-fetch-mode":            true,
+		"sec-fetch-site":            true,
+		"cache-control":             true,
+	}
+	for _, header := range customHeaders {
+		if colonIndex := strings.Index(header, ":"); colonIndex != -1 {
+			key := strings.ToLower(strings.TrimSpace(header[:colonIndex]))
+			if !alreadyProcessedHeaders[key] {
+				headers = append(headers, header)
+			}
+		}
+	}
 	return headers
 }
 
@@ -132,7 +199,6 @@ func setCookies(ctx context.Context, targetURL string, cookies []string) error {
 	if !strings.Contains(domain, ".") {
 		domain = "." + domain
 	}
-	// Set each cookie
 	for _, cookieStr := range cookies {
 		// Parse cookie string (format: "name=value" or "name=value; domain=example.com")
 		parts := strings.Split(cookieStr, ";")
@@ -148,24 +214,68 @@ func setCookies(ctx context.Context, targetURL string, cookies []string) error {
 		path := "/"
 		secure := parsedURL.Scheme == "https"
 		httpOnly := false
+		sameSite := ""
+		var expires *time.Time
+		var maxAge *int64
 		for i := 1; i < len(parts); i++ {
 			attr := strings.TrimSpace(parts[i])
-			if strings.HasPrefix(strings.ToLower(attr), "domain=") {
+			attrLower := strings.ToLower(attr)
+			switch {
+			case strings.HasPrefix(attrLower, "domain="):
 				cookieDomain = strings.TrimSpace(attr[7:])
-			} else if strings.HasPrefix(strings.ToLower(attr), "path=") {
+			case strings.HasPrefix(attrLower, "path="):
 				path = strings.TrimSpace(attr[5:])
-			} else if strings.ToLower(attr) == "secure" {
+			case attrLower == "secure":
 				secure = true
-			} else if strings.ToLower(attr) == "httponly" {
+			case attrLower == "httponly":
 				httpOnly = true
+			case strings.HasPrefix(attrLower, "samesite="):
+				sameSite = strings.TrimSpace(attr[9:])
+			case strings.HasPrefix(attrLower, "expires="):
+				expiresStr := strings.TrimSpace(attr[8:])
+				// Try parsing as RFC1123, if it fails, try as RFC1123Z
+				if parsedExpires, err := time.Parse(time.RFC1123, expiresStr); err == nil {
+					expires = &parsedExpires
+				} else {
+					parsedExpires, err := time.Parse(time.RFC1123Z, expiresStr)
+					if err == nil {
+						expires = &parsedExpires
+					} else {
+						return fmt.Errorf("invalid expires format: %s", expiresStr)
+					}
+				}
+			case strings.HasPrefix(attrLower, "max-age="):
+				if maxAgeVal, err := fmt.Sscanf(strings.TrimSpace(attr[8:]), "%d", &maxAge); err == nil && maxAgeVal == 1 {
+					age := int64(0)
+					fmt.Sscanf(strings.TrimSpace(attr[8:]), "%d", &age)
+					maxAge = &age
+				}
 			}
 		}
-		// Set cookie using CDP
-		err := chromedp.Run(ctx, cdpnetwork.SetCookie(name, value).
+		// Build cookie command
+		cookieCmd := cdpnetwork.SetCookie(name, value).
 			WithDomain(cookieDomain).
 			WithPath(path).
 			WithSecure(secure).
-			WithHTTPOnly(httpOnly))
+			WithHTTPOnly(httpOnly)
+		// Add SameSite if specified
+		if sameSite != "" {
+			switch strings.ToLower(sameSite) {
+			case "strict":
+				cookieCmd = cookieCmd.WithSameSite(cdpnetwork.CookieSameSiteStrict)
+			case "lax":
+				cookieCmd = cookieCmd.WithSameSite(cdpnetwork.CookieSameSiteLax)
+			case "none":
+				cookieCmd = cookieCmd.WithSameSite(cdpnetwork.CookieSameSiteNone)
+			}
+		}
+		// Add expiration if specified
+		if expires != nil {
+			expiresTime := cdp.TimeSinceEpoch(*expires)
+			cookieCmd = cookieCmd.WithExpires(&expiresTime)
+		}
+		// Execute cookie command
+		err := chromedp.Run(ctx, cookieCmd)
 		if err != nil {
 			return fmt.Errorf("failed to set cookie %s: %v", name, err)
 		}
@@ -174,27 +284,22 @@ func setCookies(ctx context.Context, targetURL string, cookies []string) error {
 }
 
 func writeOutput(content string) error {
-	if outputFile != "" {
-		// Determine the full file path
+	if outputFile != "" { // Determine the full file path
 		var filePath string
-		if outputDir != "" {
-			// Create the output directory if it doesn't exist
+		if outputDir != "" { // Create the output directory if it doesn't exist
 			err := os.MkdirAll(outputDir, 0755)
 			if err != nil {
 				return fmt.Errorf("failed to create output directory: %v", err)
 			}
-			// Join directory and filename
 			filePath = filepath.Join(outputDir, outputFile)
 		} else {
 			filePath = outputFile
 		}
 		var file *os.File
 		var err error
-		if appendMode {
-			// Open file in append mode, create if it doesn't exist
+		if appendMode { // Open file in append mode, create if it doesn't exist
 			file, err = os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-		} else {
-			// Create new file (overwrite existing)
+		} else { // Create new file (overwrite existing)
 			file, err = os.Create(filePath)
 		}
 		if err != nil {
@@ -211,7 +316,6 @@ func writeOutput(content string) error {
 			fmt.Fprintf(os.Stderr, "Output written to: %s\n", filePath)
 		}
 	} else {
-		// Write to stdout
 		fmt.Print(content)
 	}
 	return nil
@@ -365,15 +469,9 @@ func runLogget(cmd *cobra.Command, args []string) {
 						headers[name] = fmt.Sprintf("%v", value)
 					}
 				}
-				// Determine request method (default to GET)
-				method := "GET"
-				if ev.RequestID != "" {
-					// Try to get method from request, but CDP doesn't always provide it
-					// We'll use GET as default for most cases
-				}
 				network = append(network, NetworkEntry{
 					URL:       response.URL,
-					Method:    method,
+					Method:    "GET",
 					Status:    int(response.Status),
 					Headers:   headers,
 					Timestamp: time.Now(),
@@ -450,13 +548,11 @@ func runLogget(cmd *cobra.Command, args []string) {
 	} else {
 		// Human-readable output
 		var outputContent strings.Builder
-
 		if verbose {
 			outputContent.WriteString(fmt.Sprintf("URL: %s\n", output.URL))
 			outputContent.WriteString(fmt.Sprintf("Status: %d\n", statusCode))
 			outputContent.WriteString(fmt.Sprintf("Duration: %v\n", output.Duration))
 			outputContent.WriteString("\n")
-			// Show detailed HTTP protocol information
 			outputContent.WriteString("=== HTTP REQUEST ===\n")
 			outputContent.WriteString(fmt.Sprintf("GET %s HTTP/1.1\n", getPathFromURL(url)))
 			dynamicHeaders := generateDynamicHeaders(url, userAgent, headers)
@@ -484,7 +580,6 @@ func runLogget(cmd *cobra.Command, args []string) {
 				outputContent.WriteString("\n")
 			}
 		}
-
 		err := writeOutput(outputContent.String())
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to write output: %v\n", err)
