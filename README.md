@@ -9,6 +9,8 @@ A command-line tool similar to `curl` that extracts browser logs and network dat
 - **Cross-Platform**: Works on Windows, Linux, and macOS
 - **No Chrome Required**: Uses embedded Chromium via `go-rod`
 - **JSON Output**: Structured data output for easy parsing
+- **File Output**: Write results to files instead of stdout
+- **Directory Organization**: Save files to specific directories with automatic directory creation
 - **Custom Headers**: Add custom HTTP headers like curl
 - **Configurable Timeout**: Set custom timeout values
 
@@ -50,36 +52,76 @@ logget <url> [flags]
 
 ```bash
 # Show console logs
-logget https://example.com --show-logs
+logget https://example.com --logs
 
 # Show network requests
-logget https://example.com --show-network
+logget https://example.com --network
 
 # Show both logs and network data
-logget https://example.com --show-logs --show-network
+logget https://example.com --logs --network
 
 # Output in JSON format
-logget https://example.com --show-logs --show-network --json
+logget https://example.com --logs --network --json
+
+# Write output to a file
+logget https://example.com --logs --output results.txt
+
+# Write JSON output to a file
+logget https://example.com --logs --json --output results.json
+
+# Save files to a specific directory
+logget https://example.com --logs --output results.txt --output-dir /tmp/logs
+
+# Create nested directories automatically
+logget https://example.com --logs --output data.txt --output-dir results/2024/october
 
 # Set custom timeout
-logget https://example.com --show-logs --timeout 60
+logget https://example.com --logs --timeout 60
 
 # Set custom wait time after page load
-logget https://example.com --show-logs --wait 5
+logget https://example.com --logs --wait 5
 
 # Add custom headers
-logget https://example.com --show-logs --header "Authorization: Bearer token" --header "X-Custom: value"
+logget https://example.com --logs --header "Authorization: Bearer token" --header "X-Custom: value"
 ```
 
 ### Options
 
-- `--show-logs`: Capture and display console logs
-- `--show-network`: Capture and display network requests
-- `--json`: Output results in JSON format
-- `--timeout SECONDS`: Set timeout in seconds (default: 60)
-- `--wait SECONDS`: Wait time in seconds after page load (default: 3)
-- `--user-agent STRING`: Set User-Agent header (default: "logget/1.0")
-- `--header "Key: Value"`: Add custom HTTP headers
+- `--logs`, `-L`: Capture and display console logs
+- `--network`, `-N`: Capture and display network requests
+- `--json`, `-J`: Output results in JSON format
+- `--output`, `-o`: Write to file instead of stdout
+- `--output-dir`: Directory to save files in (creates directories automatically)
+- `--timeout`, `-T`: Set timeout in seconds (default: 60)
+- `--wait`, `-W`: Wait time in seconds after page load (default: 3)
+- `--user-agent`, `-A`: Set User-Agent header (default: "logget/1.0")
+- `--header`, `-H`: Add custom HTTP headers (format: 'Key: Value')
+- `--verbose`, `-V`: Show detailed HTTP protocol information
+- `--version`, `-v`: Show version information
+
+### File Output and Directory Organization
+
+The `--output` and `--output-dir` flags allow you to save results to files instead of displaying them on stdout:
+
+```bash
+# Save to a specific file
+logget https://example.com --logs --output results.txt
+
+# Save to a directory (creates the directory if it doesn't exist)
+logget https://example.com --logs --output results.txt --output-dir /tmp/logs
+
+# Create nested directory structure automatically
+logget https://example.com --logs --output data.txt --output-dir logs/2024/october/27
+
+# Works with JSON output too
+logget https://example.com --logs --json --output data.json --output-dir results
+```
+
+**Key Features:**
+- **Automatic Directory Creation**: Creates directories and subdirectories as needed
+- **Cross-Platform Paths**: Uses proper path separators for your operating system
+- **Error Handling**: Shows clear error messages if file creation fails
+- **Confirmation**: Displays the full path where the file was saved
 
 ## Use Cases
 
@@ -88,6 +130,9 @@ logget https://example.com --show-logs --header "Authorization: Bearer token" --
 - **Monitoring**: Track application behavior and performance
 - **Security Analysis**: Inspect network traffic and JavaScript execution
 - **API Testing**: Monitor API calls and responses
+- **Automation**: Save results to files for batch processing and analysis
+- **Logging**: Create organized log files with timestamps and structured data
+- **CI/CD Integration**: Generate reports and artifacts for continuous integration pipelines
 - **AI Utility**: Allow your AI agents use this command for efficient debugging
 
 ## Comparison with curl
@@ -96,6 +141,8 @@ logget https://example.com --show-logs --header "Authorization: Bearer token" --
 |---------|------|--------|
 | HTTP requests | ✅ | ✅ |
 | Custom headers | ✅ | ✅ |
+| File output | ✅ | ✅ |
+| Directory organization | ✅ | ✅ |
 | Response body | ✅ | ❌ |
 | Console logs | ❌ | ✅ |
 | Network monitoring | ❌ | ✅ |

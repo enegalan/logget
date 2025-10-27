@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -51,6 +52,8 @@ var (
 	headers     []string
 	versionFlag bool
 	verbose     bool
+	outputFile  string
+	outputDir   string
 	version     string = "dev" // Will be set via ldflags during build
 )
 
@@ -114,6 +117,41 @@ func generateDynamicHeaders(url string, userAgent string, customHeaders []string
 	return headers
 }
 
+func writeOutput(content string) error {
+	if outputFile != "" {
+		// Determine the full file path
+		var filePath string
+		if outputDir != "" {
+			// Create the output directory if it doesn't exist
+			err := os.MkdirAll(outputDir, 0755)
+			if err != nil {
+				return fmt.Errorf("failed to create output directory: %v", err)
+			}
+			// Join directory and filename
+			filePath = filepath.Join(outputDir, outputFile)
+		} else {
+			filePath = outputFile
+		}
+
+		// Write to file
+		file, err := os.Create(filePath)
+		if err != nil {
+			return fmt.Errorf("failed to create output file: %v", err)
+		}
+		defer file.Close()
+
+		_, err = file.WriteString(content)
+		if err != nil {
+			return fmt.Errorf("failed to write to output file: %v", err)
+		}
+		fmt.Fprintf(os.Stderr, "Output written to: %s\n", filePath)
+	} else {
+		// Write to stdout
+		fmt.Print(content)
+	}
+	return nil
+}
+
 func main() {
 	log.SetOutput(io.Discard)
 	var rootCmd = &cobra.Command{
@@ -130,6 +168,8 @@ func main() {
 	rootCmd.Flags().IntVarP(&wait, "wait", "W", 3, "Wait time in seconds after page load")
 	rootCmd.Flags().StringVarP(&userAgent, "user-agent", "A", "logget/1.0", "Set User-Agent header")
 	rootCmd.Flags().StringArrayVarP(&headers, "header", "H", []string{}, "Add custom headers (format: 'Key: Value')")
+	rootCmd.Flags().StringVarP(&outputFile, "output", "o", "", "Write to file instead of stdout")
+	rootCmd.Flags().StringVar(&outputDir, "output-dir", "", "Directory to save files in")
 	rootCmd.Flags().BoolVarP(&versionFlag, "version", "v", false, "Show version information")
 	rootCmd.Flags().BoolVarP(&verbose, "verbose", "V", false, "Show detailed HTTP protocol information")
 	if err := rootCmd.Execute(); err != nil {
@@ -327,41 +367,53 @@ func runLogget(cmd *cobra.Command, args []string) {
 			fmt.Fprintf(os.Stderr, "Failed to marshal JSON: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Println(string(jsonData))
+		err = writeOutput(string(jsonData) + "\n")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to write output: %v\n", err)
+			os.Exit(1)
+		}
 	} else {
 		// Human-readable output
+		var outputContent strings.Builder
+
 		if verbose {
-			fmt.Printf("URL: %s\n", output.URL)
-			fmt.Printf("Status: %d\n", statusCode)
-			fmt.Printf("Duration: %v\n", output.Duration)
-			fmt.Println()
+			outputContent.WriteString(fmt.Sprintf("URL: %s\n", output.URL))
+			outputContent.WriteString(fmt.Sprintf("Status: %d\n", statusCode))
+			outputContent.WriteString(fmt.Sprintf("Duration: %v\n", output.Duration))
+			outputContent.WriteString("\n")
 			// Show detailed HTTP protocol information
-			fmt.Println("=== HTTP REQUEST ===")
-			fmt.Printf("GET %s HTTP/1.1\n", getPathFromURL(url))
+			outputContent.WriteString("=== HTTP REQUEST ===\n")
+			outputContent.WriteString(fmt.Sprintf("GET %s HTTP/1.1\n", getPathFromURL(url)))
 			dynamicHeaders := generateDynamicHeaders(url, userAgent, headers)
 			for _, header := range dynamicHeaders {
-				fmt.Printf("%s\n", header)
+				outputContent.WriteString(fmt.Sprintf("%s\n", header))
 			}
-			fmt.Println()
+			outputContent.WriteString("\n")
 		}
 		if showLogs && len(logs) > 0 {
-			fmt.Println("=== CONSOLE LOGS ===")
+			outputContent.WriteString("=== CONSOLE LOGS ===\n")
 			for _, log := range logs {
-				fmt.Printf("[%s] %s: %s\n", log.Time.Format("15:04:05"), strings.ToUpper(log.Level), log.Message)
+				outputContent.WriteString(fmt.Sprintf("[%s] %s: %s\n", log.Time.Format("15:04:05"), strings.ToUpper(log.Level), log.Message))
 			}
-			fmt.Println()
+			outputContent.WriteString("\n")
 		}
 		if showNetwork && len(network) > 0 {
-			fmt.Println("=== NETWORK REQUESTS ===")
+			outputContent.WriteString("=== NETWORK REQUESTS ===\n")
 			for _, net := range network {
-				fmt.Printf("%s %s -> %d\n", net.Method, net.URL, net.Status)
+				outputContent.WriteString(fmt.Sprintf("%s %s -> %d\n", net.Method, net.URL, net.Status))
 				if len(net.Headers) > 0 {
 					for k, v := range net.Headers {
-						fmt.Printf("  %s: %s\n", k, v)
+						outputContent.WriteString(fmt.Sprintf("  %s: %s\n", k, v))
 					}
 				}
-				fmt.Println()
+				outputContent.WriteString("\n")
 			}
+		}
+
+		err := writeOutput(outputContent.String())
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to write output: %v\n", err)
+			os.Exit(1)
 		}
 	}
 }
