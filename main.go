@@ -46,20 +46,22 @@ type OutputData struct {
 }
 
 var (
-	showLogs    bool
-	showNetwork bool
-	jsonOutput  bool
-	timeout     int
-	wait        int
-	userAgent   string
-	headers     []string
-	cookies     []string
-	versionFlag bool
-	verbose     bool
-	outputFile  string
-	outputDir   string
-	appendMode  bool
-	version     string = "dev" // Will be set via ldflags during build
+	showLogs         bool
+	showNetwork      bool
+	jsonOutput       bool
+	timeout          int
+	wait             int
+	userAgent        string
+	headers          []string
+	cookies          []string
+	versionFlag      bool
+	verbose          bool
+	outputFile       string
+	outputDir        string
+	appendMode       bool
+	version          string            = "dev" // Will be set via ldflags during build
+	responseHeaders  map[string]string         // Store response headers for verbose mode
+	responseCaptured bool                      // Flag to track if we've captured response headers
 )
 
 func getHostFromURL(url string) string {
@@ -429,6 +431,8 @@ func runLogget(cmd *cobra.Command, args []string) {
 	var network []NetworkEntry
 	var responseProtocol string = initialProtocol
 	var responseStatusCode int = initialStatusCode
+	responseHeaders = make(map[string]string) // Initialize response headers map
+	responseCaptured = false                  // Reset flag
 	startTime := time.Now()
 	// Enable CDP domains and set up event listeners
 	if showLogs {
@@ -487,7 +491,7 @@ func runLogget(cmd *cobra.Command, args []string) {
 			}
 		}
 		// Network events
-		if showNetwork {
+		if showNetwork || verbose {
 			if ev, ok := ev.(*cdpnetwork.EventResponseReceived); ok {
 				response := ev.Response
 				// Convert headers to map
@@ -499,15 +503,21 @@ func runLogget(cmd *cobra.Command, args []string) {
 						headers[name] = fmt.Sprintf("%v", value)
 					}
 				}
-				network = append(network, NetworkEntry{
-					URL:       response.URL,
-					Method:    "GET",
-					Status:    int(response.Status),
-					Headers:   headers,
-					Timestamp: time.Now(),
-					Type:      string(response.MimeType),
-					Size:      int64(response.EncodedDataLength),
-				})
+				if verbose && !responseCaptured {
+					responseHeaders = headers
+					responseCaptured = true
+				}
+				if showNetwork {
+					network = append(network, NetworkEntry{
+						URL:       response.URL,
+						Method:    "GET",
+						Status:    int(response.Status),
+						Headers:   headers,
+						Timestamp: time.Now(),
+						Type:      string(response.MimeType),
+						Size:      int64(response.EncodedDataLength),
+					})
+				}
 			}
 		}
 	})
@@ -576,6 +586,13 @@ func runLogget(cmd *cobra.Command, args []string) {
 				outputContent.WriteString(fmt.Sprintf("%s\n", header))
 			}
 			outputContent.WriteString("\n")
+			if len(responseHeaders) > 0 {
+				outputContent.WriteString("=== RESPONSE HEADERS ===\n")
+				for name, value := range responseHeaders {
+					outputContent.WriteString(fmt.Sprintf("%s: %s\n", name, value))
+				}
+				outputContent.WriteString("\n")
+			}
 		}
 		if showLogs && len(logs) > 0 {
 			outputContent.WriteString("=== CONSOLE LOGS ===\n")
