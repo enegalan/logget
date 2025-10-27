@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -73,17 +74,36 @@ func getHostFromURL(url string) string {
 	return url
 }
 
-func getPathFromURL(url string) string {
-	if strings.HasPrefix(url, "http://") {
-		url = url[7:]
-	} else if strings.HasPrefix(url, "https://") {
-		url = url[8:]
+// getInitialResponse makes an HTTP request to capture the initial response and redirect information
+func getInitialResponse(targetURL string, userAgent string, customHeaders []string) (string, int, error) {
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			// Don't follow redirects - we want to capture the redirect response
+			return http.ErrUseLastResponse
+		},
+		Timeout: 5 * time.Second,
 	}
-	// Find the first slash to get the path
-	if slashIndex := strings.Index(url, "/"); slashIndex != -1 {
-		return url[slashIndex:]
+	req, err := http.NewRequest("GET", targetURL, nil)
+	if err != nil {
+		return "", 0, err
 	}
-	return "/"
+	// Set User-Agent
+	req.Header.Set("User-Agent", userAgent)
+	// Set custom headers
+	for _, header := range customHeaders {
+		if colonIndex := strings.Index(header, ":"); colonIndex != -1 {
+			key := strings.TrimSpace(header[:colonIndex])
+			value := strings.TrimSpace(header[colonIndex+1:])
+			req.Header.Set(key, value)
+		}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", 0, err
+	}
+	defer resp.Body.Close()
+	// Return protocol and status code
+	return resp.Proto, resp.StatusCode, nil
 }
 
 func generateDynamicHeaders(url string, userAgent string, customHeaders []string) []string {
@@ -394,9 +414,21 @@ func runLogget(cmd *cobra.Command, args []string) {
 	// Create context
 	ctx, cancel = chromedp.NewContext(allocCtx)
 	defer cancel()
+
+	// Get initial response to capture redirect information
+	initialProtocol, initialStatusCode, err := getInitialResponse(url, userAgent, headers)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to get initial response: %v\n", err)
+		// Fallback to defaults
+		initialProtocol = "HTTP/1.1"
+		initialStatusCode = 200
+	}
+
 	// Collect logs and network data
 	var logs []LogEntry
 	var network []NetworkEntry
+	var responseProtocol string = initialProtocol
+	var responseStatusCode int = initialStatusCode
 	startTime := time.Now()
 	// Enable CDP domains and set up event listeners
 	if showLogs {
@@ -413,8 +445,8 @@ func runLogget(cmd *cobra.Command, args []string) {
 			os.Exit(1)
 		}
 	}
-	if showNetwork {
-		// Enable network domain for network monitoring
+	if showNetwork || verbose {
+		// Enable network domain for network monitoring or protocol detection
 		err := chromedp.Run(ctx, cdpnetwork.Enable())
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to enable network domain: %v\n", err)
@@ -456,9 +488,7 @@ func runLogget(cmd *cobra.Command, args []string) {
 		}
 		// Network events
 		if showNetwork {
-			// Network response received
 			if ev, ok := ev.(*cdpnetwork.EventResponseReceived); ok {
-				// Get response details
 				response := ev.Response
 				// Convert headers to map
 				headers := make(map[string]string)
@@ -495,13 +525,12 @@ func runLogget(cmd *cobra.Command, args []string) {
 		chromedp.Sleep(time.Duration(wait) * time.Second), // Wait for the page to load
 	}
 	// Execute tasks
-	err := chromedp.Run(ctx, tasks...)
+	err = chromedp.Run(ctx, tasks...)
 	if err != nil {
 		// For HTTP error responses, show basic info before failing
 		if strings.Contains(err.Error(), "ERR_HTTP_RESPONSE_CODE_FAILURE") {
 			if verbose {
-				fmt.Printf("URL: %s\n", url)
-				fmt.Printf("Status: HTTP Error (navigation failed)\n")
+				fmt.Printf("%s Error (navigation failed)\n", responseProtocol)
 				fmt.Printf("Duration: %v\n", time.Since(startTime))
 				fmt.Println()
 			}
@@ -512,19 +541,8 @@ func runLogget(cmd *cobra.Command, args []string) {
 			os.Exit(1)
 		}
 	}
-	// Always collect basic network info (status code)
-	var statusCode int
-	err = chromedp.Run(ctx, chromedp.Evaluate(`
-		// Try to get the status code from the current page
-		if (window.performance && window.performance.getEntriesByType) {
-			const entries = window.performance.getEntriesByType('navigation');
-			if (entries.length > 0) entries[0].responseStatus || 200;
-			else 200;
-		} else 200;
-	`, &statusCode))
-	if err != nil {
-		statusCode = 200 // Default to 200 if we can't determine
-	}
+	// Use the status code we captured from the initial response
+	statusCode := responseStatusCode
 	duration := time.Since(startTime)
 	// Prepare output data
 	output := OutputData{
@@ -549,12 +567,10 @@ func runLogget(cmd *cobra.Command, args []string) {
 		// Human-readable output
 		var outputContent strings.Builder
 		if verbose {
-			outputContent.WriteString(fmt.Sprintf("URL: %s\n", output.URL))
-			outputContent.WriteString(fmt.Sprintf("Status: %d\n", statusCode))
+			outputContent.WriteString(fmt.Sprintf("%s %d\n", responseProtocol, statusCode))
 			outputContent.WriteString(fmt.Sprintf("Duration: %v\n", output.Duration))
 			outputContent.WriteString("\n")
-			outputContent.WriteString("=== HTTP REQUEST ===\n")
-			outputContent.WriteString(fmt.Sprintf("GET %s HTTP/1.1\n", getPathFromURL(url)))
+			outputContent.WriteString("=== REQUEST HEADERS ===\n")
 			dynamicHeaders := generateDynamicHeaders(url, userAgent, headers)
 			for _, header := range dynamicHeaders {
 				outputContent.WriteString(fmt.Sprintf("%s\n", header))
