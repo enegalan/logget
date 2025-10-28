@@ -2,20 +2,16 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
-	"net/http"
-	"net/url"
+	helpers "logget/helpers"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
 
-	"github.com/chromedp/cdproto/cdp"
 	cdplog "github.com/chromedp/cdproto/log"
 	cdpnetwork "github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/runtime"
@@ -23,22 +19,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type LogEntry struct {
-	Level   string    `json:"level"`
-	Message string    `json:"message"`
-	Time    time.Time `json:"time"`
-	Source  string    `json:"source"`
-}
-
-type NetworkEntry struct {
-	URL       string            `json:"url"`
-	Method    string            `json:"method"`
-	Status    int               `json:"status"`
-	Headers   map[string]string `json:"headers"`
-	Timestamp time.Time         `json:"timestamp"`
-	Type      string            `json:"type"`
-	Size      int64             `json:"size"`
-}
+type LogEntry = helpers.LogEntry
+type NetworkEntry = helpers.NetworkEntry
 
 type OutputData struct {
 	URL      string         `json:"url"`
@@ -61,9 +43,9 @@ var (
 	outputFile       string
 	outputDir        string
 	appendMode       bool
-	version          string            = "dev" // Will be set via ldflags during build
-	responseHeaders  map[string]string         // Store response headers for verbose mode
-	responseCaptured bool                      // Flag to track if we've captured response headers
+	version          string = "dev"
+	responseHeaders  map[string]string
+	responseCaptured bool
 
 	followMode      bool
 	filterPattern   string
@@ -72,490 +54,6 @@ var (
 
 	skipSSLVerify bool
 )
-
-func getHostFromURL(url string) string {
-	if strings.HasPrefix(url, "http://") {
-		url = url[7:]
-	} else if strings.HasPrefix(url, "https://") {
-		url = url[8:]
-	}
-	if slashIndex := strings.Index(url, "/"); slashIndex != -1 {
-		return url[:slashIndex]
-	}
-	return url
-}
-
-// getInitialResponse makes an HTTP request to capture the initial response and redirect information
-func getInitialResponse(targetURL string, userAgent string, customHeaders []string) (string, int, error) {
-	transport := &http.Transport{}
-	if skipSSLVerify {
-		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-	}
-	client := &http.Client{
-		Transport: transport,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			// Don't follow redirects - we want to capture the redirect response
-			return http.ErrUseLastResponse
-		},
-		Timeout: 5 * time.Second,
-	}
-	req, err := http.NewRequest("GET", targetURL, nil)
-	if err != nil {
-		return "", 0, err
-	}
-	// Set User-Agent
-	req.Header.Set("User-Agent", userAgent)
-	// Set custom headers
-	for _, header := range customHeaders {
-		if colonIndex := strings.Index(header, ":"); colonIndex != -1 {
-			key := strings.TrimSpace(header[:colonIndex])
-			value := strings.TrimSpace(header[colonIndex+1:])
-			req.Header.Set(key, value)
-		}
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", 0, err
-	}
-	defer resp.Body.Close()
-	// Return protocol and status code
-	return resp.Proto, resp.StatusCode, nil
-}
-
-func generateDynamicHeaders(url string, userAgent string, customHeaders []string) []string {
-	customHeaderMap := make(map[string]string)
-	for _, header := range customHeaders {
-		if colonIndex := strings.Index(header, ":"); colonIndex != -1 {
-			key := strings.TrimSpace(header[:colonIndex])
-			value := strings.TrimSpace(header[colonIndex+1:])
-			customHeaderMap[strings.ToLower(key)] = value
-		}
-	}
-	var headers []string
-	headers = append(headers, fmt.Sprintf("Host: %s", getHostFromURL(url)))
-	// User-Agent
-	if customUA, exists := customHeaderMap["user-agent"]; exists {
-		headers = append(headers, fmt.Sprintf("User-Agent: %s", customUA))
-	} else {
-		headers = append(headers, fmt.Sprintf("User-Agent: %s", userAgent))
-	}
-	// Accept
-	if customAccept, exists := customHeaderMap["accept"]; exists {
-		headers = append(headers, fmt.Sprintf("Accept: %s", customAccept))
-	} else {
-		// Inherit Accept header based on the URL
-		if strings.Contains(url, ".json") || strings.Contains(url, "/api/") || strings.Contains(url, "api.") {
-			headers = append(headers, "Accept: application/json,text/plain,*/*")
-		} else if strings.Contains(url, ".css") {
-			headers = append(headers, "Accept: text/css,*/*;q=0.1")
-		} else {
-			headers = append(headers, "Accept: */*")
-		}
-	}
-	// Accept-Language
-	if customLang, exists := customHeaderMap["accept-language"]; exists {
-		headers = append(headers, fmt.Sprintf("Accept-Language: %s", customLang))
-	} else {
-		headers = append(headers, "Accept-Language: en-US,en;q=0.5")
-	}
-	// Accept-Encoding
-	if customEncoding, exists := customHeaderMap["accept-encoding"]; exists {
-		headers = append(headers, fmt.Sprintf("Accept-Encoding: %s", customEncoding))
-	} else {
-		headers = append(headers, "Accept-Encoding: gzip, deflate")
-	}
-	// Connection
-	if customConn, exists := customHeaderMap["connection"]; exists {
-		headers = append(headers, fmt.Sprintf("Connection: %s", customConn))
-	} else {
-		headers = append(headers, "Connection: keep-alive")
-	}
-	// Security headers
-	if strings.HasPrefix(url, "https://") {
-		if customUpgrade, exists := customHeaderMap["upgrade-insecure-requests"]; exists {
-			headers = append(headers, fmt.Sprintf("Upgrade-Insecure-Requests: %s", customUpgrade))
-		} else {
-			headers = append(headers, "Upgrade-Insecure-Requests: 1")
-		}
-		if customDest, exists := customHeaderMap["sec-fetch-dest"]; exists {
-			headers = append(headers, fmt.Sprintf("Sec-Fetch-Dest: %s", customDest))
-		} else {
-			headers = append(headers, "Sec-Fetch-Dest: document")
-		}
-		if customMode, exists := customHeaderMap["sec-fetch-mode"]; exists {
-			headers = append(headers, fmt.Sprintf("Sec-Fetch-Mode: %s", customMode))
-		} else {
-			headers = append(headers, "Sec-Fetch-Mode: navigate")
-		}
-		if customSite, exists := customHeaderMap["sec-fetch-site"]; exists {
-			headers = append(headers, fmt.Sprintf("Sec-Fetch-Site: %s", customSite))
-		} else {
-			headers = append(headers, "Sec-Fetch-Site: none")
-		}
-	}
-	// Cache control
-	if customCache, exists := customHeaderMap["cache-control"]; exists {
-		headers = append(headers, fmt.Sprintf("Cache-Control: %s", customCache))
-	} else {
-		headers = append(headers, "Cache-Control: max-age=0")
-	}
-	// Add remaining custom headers
-	alreadyProcessedHeaders := map[string]bool{
-		"user-agent":                true,
-		"accept":                    true,
-		"accept-language":           true,
-		"accept-encoding":           true,
-		"connection":                true,
-		"upgrade-insecure-requests": true,
-		"sec-fetch-dest":            true,
-		"sec-fetch-mode":            true,
-		"sec-fetch-site":            true,
-		"cache-control":             true,
-	}
-	for _, header := range customHeaders {
-		if colonIndex := strings.Index(header, ":"); colonIndex != -1 {
-			key := strings.ToLower(strings.TrimSpace(header[:colonIndex]))
-			if !alreadyProcessedHeaders[key] {
-				headers = append(headers, header)
-			}
-		}
-	}
-	return headers
-}
-
-func setCookies(ctx context.Context, targetURL string, cookies []string) error {
-	if len(cookies) == 0 {
-		return nil
-	}
-	parsedURL, err := url.Parse(targetURL)
-	if err != nil {
-		return fmt.Errorf("failed to parse URL: %v", err)
-	}
-	domain := parsedURL.Host
-	if !strings.Contains(domain, ".") {
-		domain = "." + domain
-	}
-	for _, cookieStr := range cookies {
-		// Parse cookie string (format: "name=value" or "name=value; domain=example.com")
-		parts := strings.Split(cookieStr, ";")
-		nameValue := strings.TrimSpace(parts[0])
-		if !strings.Contains(nameValue, "=") {
-			return fmt.Errorf("invalid cookie format: %s (expected 'name=value')", cookieStr)
-		}
-		nameValueParts := strings.SplitN(nameValue, "=", 2)
-		name := strings.TrimSpace(nameValueParts[0])
-		value := strings.TrimSpace(nameValueParts[1])
-		// Parse additional attributes
-		cookieDomain := domain
-		path := "/"
-		secure := parsedURL.Scheme == "https"
-		httpOnly := false
-		sameSite := ""
-		var expires *time.Time
-		var maxAge *int64
-		for i := 1; i < len(parts); i++ {
-			attr := strings.TrimSpace(parts[i])
-			attrLower := strings.ToLower(attr)
-			switch {
-			case strings.HasPrefix(attrLower, "domain="):
-				cookieDomain = strings.TrimSpace(attr[7:])
-			case strings.HasPrefix(attrLower, "path="):
-				path = strings.TrimSpace(attr[5:])
-			case attrLower == "secure":
-				secure = true
-			case attrLower == "httponly":
-				httpOnly = true
-			case strings.HasPrefix(attrLower, "samesite="):
-				sameSite = strings.TrimSpace(attr[9:])
-			case strings.HasPrefix(attrLower, "expires="):
-				expiresStr := strings.TrimSpace(attr[8:])
-				// Try parsing as RFC1123, if it fails, try as RFC1123Z
-				if parsedExpires, err := time.Parse(time.RFC1123, expiresStr); err == nil {
-					expires = &parsedExpires
-				} else {
-					parsedExpires, err := time.Parse(time.RFC1123Z, expiresStr)
-					if err == nil {
-						expires = &parsedExpires
-					} else {
-						return fmt.Errorf("invalid expires format: %s", expiresStr)
-					}
-				}
-			case strings.HasPrefix(attrLower, "max-age="):
-				if maxAgeVal, err := fmt.Sscanf(strings.TrimSpace(attr[8:]), "%d", &maxAge); err == nil && maxAgeVal == 1 {
-					age := int64(0)
-					fmt.Sscanf(strings.TrimSpace(attr[8:]), "%d", &age)
-					maxAge = &age
-				}
-			}
-		}
-		// Build cookie command
-		cookieCmd := cdpnetwork.SetCookie(name, value).
-			WithDomain(cookieDomain).
-			WithPath(path).
-			WithSecure(secure).
-			WithHTTPOnly(httpOnly)
-		// Add SameSite if specified
-		if sameSite != "" {
-			switch strings.ToLower(sameSite) {
-			case "strict":
-				cookieCmd = cookieCmd.WithSameSite(cdpnetwork.CookieSameSiteStrict)
-			case "lax":
-				cookieCmd = cookieCmd.WithSameSite(cdpnetwork.CookieSameSiteLax)
-			case "none":
-				cookieCmd = cookieCmd.WithSameSite(cdpnetwork.CookieSameSiteNone)
-			}
-		}
-		// Add expiration if specified
-		if expires != nil {
-			expiresTime := cdp.TimeSinceEpoch(*expires)
-			cookieCmd = cookieCmd.WithExpires(&expiresTime)
-		}
-		// Execute cookie command
-		err := chromedp.Run(ctx, cookieCmd)
-		if err != nil {
-			return fmt.Errorf("failed to set cookie %s: %v", name, err)
-		}
-	}
-	return nil
-}
-
-func writeOutput(content string) error {
-	if outputFile != "" { // Determine the full file path
-		var filePath string
-		if outputDir != "" { // Create the output directory if it doesn't exist
-			err := os.MkdirAll(outputDir, 0755)
-			if err != nil {
-				return fmt.Errorf("failed to create output directory: %v", err)
-			}
-			filePath = filepath.Join(outputDir, outputFile)
-		} else {
-			filePath = outputFile
-		}
-		var file *os.File
-		var err error
-		if appendMode { // Open file in append mode, create if it doesn't exist
-			file, err = os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-		} else { // Create new file (overwrite existing)
-			file, err = os.Create(filePath)
-		}
-		if err != nil {
-			return fmt.Errorf("failed to open output file: %v", err)
-		}
-		defer file.Close()
-		_, err = file.WriteString(content)
-		if err != nil {
-			return fmt.Errorf("failed to write to output file: %v", err)
-		}
-		if appendMode {
-			fmt.Fprintf(os.Stderr, "Output appended to: %s\n", filePath)
-		} else {
-			fmt.Fprintf(os.Stderr, "Output written to: %s\n", filePath)
-		}
-	} else {
-		fmt.Print(content)
-	}
-	return nil
-}
-
-func shouldShowLine(line string, filterRegex *regexp.Regexp, excludeRegex *regexp.Regexp) bool {
-	if excludeRegex != nil && excludeRegex.MatchString(line) {
-		return false
-	}
-	if filterRegex != nil && !filterRegex.MatchString(line) {
-		return false
-	}
-	return true
-}
-
-func streamLogsRealTime(ctx context.Context, url string) error {
-	// Create chromedp context
-	opts := append(chromedp.DefaultExecAllocatorOptions[:],
-		chromedp.Flag("headless", true),
-		chromedp.Flag("disable-gpu", true),
-		chromedp.Flag("disable-dev-shm-usage", true),
-		chromedp.Flag("no-sandbox", true),
-		chromedp.Flag("disable-extensions", true),
-		chromedp.Flag("disable-plugins", true),
-		chromedp.Flag("disable-web-security", true),
-		chromedp.Flag("disable-features", "VizDisplayCompositor"),
-		chromedp.Flag("ignore-certificate-errors", true),
-		chromedp.Flag("ignore-ssl-errors", true),
-		chromedp.Flag("allow-running-insecure-content", true),
-		chromedp.Flag("disable-certificate-verification", true),
-	)
-	// SSL bypass flags
-	if skipSSLVerify {
-		opts = append(opts,
-			chromedp.Flag("ignore-certificate-errors-spki-list", true),
-			chromedp.Flag("ignore-ssl-errors", true),
-			chromedp.Flag("ignore-certificate-errors", true),
-		)
-	}
-	allocCtx, cancel := chromedp.NewExecAllocator(ctx, opts...)
-	defer cancel()
-	ctx, cancel = chromedp.NewContext(allocCtx)
-	defer cancel()
-	// Enable domains
-	if err := chromedp.Run(ctx, cdplog.Enable()); err != nil {
-		return fmt.Errorf("failed to enable log domain: %v", err)
-	}
-	if err := chromedp.Run(ctx, runtime.Enable()); err != nil {
-		return fmt.Errorf("failed to enable runtime domain: %v", err)
-	}
-	if showNetwork {
-		if err := chromedp.Run(ctx, cdpnetwork.Enable()); err != nil {
-			return fmt.Errorf("failed to enable network domain: %v", err)
-		}
-	}
-	// Set up event listeners
-	chromedp.ListenTarget(ctx, func(ev interface{}) {
-		// Browser logs
-		if ev, ok := ev.(*cdplog.EventEntryAdded); ok {
-			logEntry := LogEntry{
-				Level:   ev.Entry.Level.String(),
-				Message: ev.Entry.Text,
-				Time:    time.Now(),
-				Source:  "browser",
-			}
-			outputLogEntry(logEntry)
-		}
-		// JavaScript console logs
-		if ev, ok := ev.(*runtime.EventConsoleAPICalled); ok {
-			var message string
-			for _, arg := range ev.Args {
-				if arg.Value != nil {
-					var str string
-					if err := json.Unmarshal(arg.Value, &str); err == nil {
-						message += str + " "
-					} else {
-						message += fmt.Sprintf("%v ", arg.Value)
-					}
-				}
-			}
-			logEntry := LogEntry{
-				Level:   ev.Type.String(),
-				Message: strings.TrimSpace(message),
-				Time:    time.Now(),
-				Source:  "console",
-			}
-			outputLogEntry(logEntry)
-		}
-		// Network events
-		if showNetwork {
-			if ev, ok := ev.(*cdpnetwork.EventResponseReceived); ok {
-				response := ev.Response
-				headers := make(map[string]string)
-				for name, value := range response.Headers {
-					if str, ok := value.(string); ok {
-						headers[name] = str
-					} else {
-						headers[name] = fmt.Sprintf("%v", value)
-					}
-				}
-				networkEntry := NetworkEntry{
-					URL:       response.URL,
-					Method:    "GET",
-					Status:    int(response.Status),
-					Headers:   headers,
-					Timestamp: time.Now(),
-					Type:      string(response.MimeType),
-					Size:      int64(response.EncodedDataLength),
-				}
-				outputNetworkEntry(networkEntry)
-			}
-		}
-	})
-	// Set cookies if provided
-	if len(cookies) > 0 {
-		if err := setCookies(ctx, url, cookies); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to set cookies: %v\n", err)
-		}
-	}
-	// Navigate to the page
-	if err := chromedp.Run(ctx, chromedp.Navigate(url)); err != nil {
-		return fmt.Errorf("failed to navigate to %s: %v", url, err)
-	}
-	// Keep streaming until context is cancelled
-	<-ctx.Done()
-	return nil
-}
-
-func outputLogEntry(logEntry LogEntry) {
-	var filterRegex *regexp.Regexp
-	var excludeRegex *regexp.Regexp
-	var err error
-	if filterPattern != "" {
-		filterRegex, err = regexp.Compile(filterPattern)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Invalid filter pattern: %v\n", err)
-			return
-		}
-	}
-	if excludePattern != "" {
-		excludeRegex, err = regexp.Compile(excludePattern)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Invalid exclude pattern: %v\n", err)
-			return
-		}
-	}
-	if !shouldShowLine(logEntry.Message, filterRegex, excludeRegex) {
-		return
-	}
-	var output string
-	if jsonOutput {
-		jsonData, _ := json.Marshal(logEntry)
-		output = string(jsonData) + "\n"
-	} else {
-		output = fmt.Sprintf("[%s] %s: %s\n",
-			logEntry.Time.Format("15:04:05"),
-			strings.ToUpper(logEntry.Level),
-			logEntry.Message)
-	}
-	if outputFile != "" {
-		writeOutput(output)
-	} else {
-		fmt.Print(output)
-	}
-}
-
-func outputNetworkEntry(networkEntry NetworkEntry) {
-	var filterRegex *regexp.Regexp
-	var excludeRegex *regexp.Regexp
-	var err error
-	if filterPattern != "" {
-		filterRegex, err = regexp.Compile(filterPattern)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Invalid filter pattern: %v\n", err)
-			return
-		}
-	}
-	if excludePattern != "" {
-		excludeRegex, err = regexp.Compile(excludePattern)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Invalid exclude pattern: %v\n", err)
-			return
-		}
-	}
-	if !shouldShowLine(networkEntry.URL, filterRegex, excludeRegex) {
-		return
-	}
-	var output string
-	if jsonOutput {
-		jsonData, _ := json.Marshal(networkEntry)
-		output = string(jsonData) + "\n"
-	} else {
-		output = fmt.Sprintf("[%s] %s %s -> %d\n",
-			networkEntry.Timestamp.Format("15:04:05"),
-			networkEntry.Method,
-			networkEntry.URL,
-			networkEntry.Status)
-	}
-	if outputFile != "" {
-		writeOutput(output)
-	} else {
-		fmt.Print(output)
-	}
-}
 
 func main() {
 	log.SetOutput(io.Discard)
@@ -607,6 +105,19 @@ func runLogget(cmd *cobra.Command, args []string) {
 }
 
 func processURL(url string) {
+	cfg := helpers.Config{
+		UserAgent:      userAgent,
+		Headers:        headers,
+		Cookies:        cookies,
+		OutputFile:     outputFile,
+		OutputDir:      outputDir,
+		AppendMode:     appendMode,
+		SkipSSLVerify:  skipSSLVerify,
+		ShowNetwork:    showNetwork,
+		JSONOutput:     jsonOutput,
+		FilterPattern:  filterPattern,
+		ExcludePattern: excludePattern,
+	}
 	// Quick check: if no data collection flags are specified, show help immediately
 	if !showLogs && !showNetwork && !verbose && !jsonOutput && !followMode {
 		fmt.Println("logget: try 'logget --help' or 'logget -h' for more information")
@@ -648,7 +159,7 @@ func processURL(url string) {
 	ctx, cancel = chromedp.NewContext(allocCtx)
 	defer cancel()
 	// Get initial response to capture redirect information
-	initialProtocol, initialStatusCode, err := getInitialResponse(url, userAgent, headers)
+	initialProtocol, initialStatusCode, err := helpers.GetInitialResponse(cfg, url)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: Failed to get initial response: %v\n", err)
 		// Fallback to defaults
@@ -752,7 +263,7 @@ func processURL(url string) {
 	})
 	// Set cookies if provided
 	if len(cookies) > 0 {
-		err := setCookies(ctx, url, cookies)
+		err := helpers.SetCookies(ctx, url, cookies)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to set cookies: %v\n", err)
 			os.Exit(1)
@@ -761,8 +272,43 @@ func processURL(url string) {
 	// Navigate to the page
 	if followMode {
 		fmt.Fprintf(os.Stderr, "Streaming logs from %s (Press Ctrl+C to stop)\n", url)
-		err = streamLogsRealTime(ctx, url)
-		if err != nil {
+		var filterRegex *regexp.Regexp
+		var excludeRegex *regexp.Regexp
+		if filterPattern != "" {
+			if r, err := regexp.Compile(filterPattern); err == nil {
+				filterRegex = r
+			}
+		}
+		if excludePattern != "" {
+			if r, err := regexp.Compile(excludePattern); err == nil {
+				excludeRegex = r
+			}
+		}
+		onLog := func(le helpers.LogEntry) {
+			if !helpers.ShouldShowLine(le.Message, filterRegex, excludeRegex) {
+				return
+			}
+			if jsonOutput {
+				b, _ := json.Marshal(le)
+				_ = helpers.WriteOutput(cfg, string(b)+"\n")
+				return
+			}
+			line := fmt.Sprintf("[%s] %s: %s\n", le.Time.Format("15:04:05"), strings.ToUpper(le.Level), le.Message)
+			_ = helpers.WriteOutput(cfg, line)
+		}
+		onNet := func(ne helpers.NetworkEntry) {
+			if !helpers.ShouldShowLine(ne.URL, filterRegex, excludeRegex) {
+				return
+			}
+			if jsonOutput {
+				b, _ := json.Marshal(ne)
+				_ = helpers.WriteOutput(cfg, string(b)+"\n")
+				return
+			}
+			line := fmt.Sprintf("[%s] %s %s -> %d\n", ne.Timestamp.Format("15:04:05"), ne.Method, ne.URL, ne.Status)
+			_ = helpers.WriteOutput(cfg, line)
+		}
+		if err := helpers.StreamLogsRealTime(cfg, ctx, url, onLog, onNet); err != nil {
 			fmt.Fprintf(os.Stderr, "Error streaming logs: %v\n", err)
 			os.Exit(1)
 		}
@@ -806,7 +352,7 @@ func processURL(url string) {
 			fmt.Fprintf(os.Stderr, "Failed to marshal JSON: %v\n", err)
 			os.Exit(1)
 		}
-		err = writeOutput(string(jsonData) + "\n")
+		err = helpers.WriteOutput(cfg, string(jsonData)+"\n")
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to write output: %v\n", err)
 			os.Exit(1)
@@ -819,7 +365,7 @@ func processURL(url string) {
 			outputContent.WriteString(fmt.Sprintf("Duration: %v\n", output.Duration))
 			outputContent.WriteString("\n")
 			outputContent.WriteString("=== REQUEST HEADERS ===\n")
-			dynamicHeaders := generateDynamicHeaders(url, userAgent, headers)
+			dynamicHeaders := helpers.GenerateDynamicHeaders(cfg, url)
 			for _, header := range dynamicHeaders {
 				outputContent.WriteString(fmt.Sprintf("%s\n", header))
 			}
@@ -851,7 +397,7 @@ func processURL(url string) {
 				outputContent.WriteString("\n")
 			}
 		}
-		err := writeOutput(outputContent.String())
+		err := helpers.WriteOutput(cfg, outputContent.String())
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to write output: %v\n", err)
 			os.Exit(1)
