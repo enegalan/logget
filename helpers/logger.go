@@ -56,9 +56,7 @@ func (l *Logger) formatMessage(level LogLevel, format string, args ...interface{
 	timestamp := time.Now().Format("15:04:05")
 	levelStr := level.String()
 	message := fmt.Sprintf(format, args...)
-	// Format timestamp
 	formattedTimestamp := l.theme.FormatTimestamp(timestamp)
-	// Format log level with color
 	formattedLevel := l.theme.FormatLogLevel(levelStr)
 	return fmt.Sprintf("[%s] %s: %s", formattedTimestamp, formattedLevel, message)
 }

@@ -32,7 +32,6 @@ func (f *OutputFormatter) FormatHTTPResponse(protocol string, statusCode int, du
 	// Duration
 	durationText := f.theme.Colorize(f.theme.Timestamp, fmt.Sprintf("Duration: %v", duration))
 	sb.WriteString(fmt.Sprintf("%s\n", durationText))
-
 	return sb.String()
 }
 
@@ -86,13 +85,11 @@ func (f *OutputFormatter) FormatNetworkRequests(network []NetworkEntry) string {
 	sectionTitle := f.theme.FormatHeader("NETWORK REQUESTS")
 	sb.WriteString(fmt.Sprintf("\n=== %s ===\n", sectionTitle))
 	for _, net := range network {
-		// Method and URL
 		formattedMethod := f.theme.Bold(net.Method)
 		formattedURL := f.theme.Colorize(Cyan, net.URL)
 		statusColor := f.theme.GetStatusColor(net.Status)
 		formattedStatus := f.theme.Colorize(statusColor, fmt.Sprintf("%d", net.Status))
 		sb.WriteString(fmt.Sprintf("%s %s -> %s\n", formattedMethod, formattedURL, formattedStatus))
-		// Headers
 		if len(net.Headers) > 0 {
 			for k, v := range net.Headers {
 				formattedKey := f.theme.Colorize(Yellow, k)
@@ -129,37 +126,30 @@ func (f *OutputFormatter) FormatErrorMessage(message string) string {
 	return f.theme.FormatError(message) + "\n"
 }
 
-// GetLogLevelColor returns the color for a log level
 func (f *OutputFormatter) GetLogLevelColor(level string) string {
 	return f.theme.GetLogLevelColor(level)
 }
 
-// GetHTTPMethodColor returns the color for an HTTP method
 func (f *OutputFormatter) GetHTTPMethodColor(method string) string {
 	return f.theme.GetHTTPMethodColor(method)
 }
 
-// GetStatusColor returns the color for an HTTP status code
 func (f *OutputFormatter) GetStatusColor(statusCode int) string {
 	return f.theme.GetStatusColor(statusCode)
 }
 
-// FormatTimestamp formats a timestamp with the theme
 func (f *OutputFormatter) FormatTimestamp(timestamp string) string {
 	return f.theme.FormatTimestamp(timestamp)
 }
 
-// FormatConsolePrefix formats the CONSOLE prefix
 func (f *OutputFormatter) FormatConsolePrefix() string {
 	return f.theme.FormatConsolePrefix()
 }
 
-// FormatNetworkPrefix formats the NETWORK prefix
 func (f *OutputFormatter) FormatNetworkPrefix() string {
 	return f.theme.FormatNetworkPrefix()
 }
 
-// Colorize applies color to text using the theme
 func (f *OutputFormatter) Colorize(color, text string) string {
 	return f.theme.Colorize(color, text)
 }
