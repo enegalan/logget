@@ -202,3 +202,37 @@ func (ct *ColorTheme) FormatSeparator(char string, length int) string {
 func (ct *ColorTheme) FormatBorder(char string) string {
 	return ct.Colorize(ct.Border, char)
 }
+
+// GetHTTPMethodColor returns the appropriate color for HTTP methods
+func (ct *ColorTheme) GetHTTPMethodColor(method string) string {
+	switch method {
+	case "GET":
+		return ct.Success // Green
+	case "POST":
+		return ct.Warn // Yellow
+	case "PUT":
+		return ct.Progress // Blue
+	case "DELETE":
+		return ct.Error // Red
+	case "PATCH":
+		return ct.Fatal // Magenta
+	default:
+		return ct.Debug // Cyan
+	}
+}
+
+// FormatHTTPMethod formats an HTTP method with appropriate color
+func (ct *ColorTheme) FormatHTTPMethod(method string) string {
+	color := ct.GetHTTPMethodColor(method)
+	return ct.Colorize(color, method)
+}
+
+// FormatNetworkPrefix formats the NETWORK prefix
+func (ct *ColorTheme) FormatNetworkPrefix() string {
+	return ct.Colorize(Bold+Cyan, "NETWORK")
+}
+
+// FormatConsolePrefix formats the CONSOLE prefix
+func (ct *ColorTheme) FormatConsolePrefix() string {
+	return ct.Colorize(Bold+Magenta, "CONSOLE")
+}

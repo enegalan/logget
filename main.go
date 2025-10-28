@@ -298,7 +298,39 @@ func processURL(url string) {
 				_ = helpers.WriteOutput(cfg, string(b)+"\n")
 				return
 			}
-			line := fmt.Sprintf("[%s] %s: %s\n", le.Time.Format("15:04:05"), strings.ToUpper(le.Level), le.Message)
+			timestamp := le.Time.Format("15:04:05")
+			level := strings.ToUpper(le.Level)
+			message := le.Message
+			levelColor := formatter.GetLogLevelColor(level)
+			var levelSymbol string
+			switch level {
+			case "DEBUG":
+				levelSymbol = "🐛"
+			case "INFO":
+				levelSymbol = "ℹ️"
+			case "WARN", "WARNING":
+				levelSymbol = "⚠️"
+			case "ERROR":
+				levelSymbol = "❌"
+			case "FATAL":
+				levelSymbol = "💀"
+			case "LOG":
+				levelSymbol = "📝"
+			case "TRACE":
+				levelSymbol = "🔍"
+			default:
+				levelSymbol = "📋"
+			}
+			formattedTimestamp := formatter.FormatTimestamp(timestamp)
+			formattedPrefix := formatter.FormatConsolePrefix()
+			formattedSymbol := formatter.Colorize(levelColor, levelSymbol)
+			formattedLevel := formatter.Colorize(levelColor, level)
+			line := fmt.Sprintf("[%s] %s %s %s: %s\n",
+				formattedTimestamp,
+				formattedPrefix,
+				formattedSymbol,
+				formattedLevel,
+				message)
 			_ = helpers.WriteOutput(cfg, line)
 		}
 		onNet := func(ne helpers.NetworkEntry) {
@@ -310,7 +342,39 @@ func processURL(url string) {
 				_ = helpers.WriteOutput(cfg, string(b)+"\n")
 				return
 			}
-			line := fmt.Sprintf("[%s] %s %s -> %d\n", ne.Timestamp.Format("15:04:05"), ne.Method, ne.URL, ne.Status)
+			timestamp := ne.Timestamp.Format("15:04:05")
+			method := ne.Method
+			url := ne.URL
+			status := ne.Status
+			methodColor := formatter.GetHTTPMethodColor(method)
+			var methodSymbol string
+			switch method {
+			case "GET":
+				methodSymbol = "📥"
+			case "POST":
+				methodSymbol = "📤"
+			case "PUT":
+				methodSymbol = "🔄"
+			case "DELETE":
+				methodSymbol = "🗑️"
+			case "PATCH":
+				methodSymbol = "🔧"
+			default:
+				methodSymbol = "🌐"
+			}
+			statusColor := formatter.GetStatusColor(status)
+			formattedTimestamp := formatter.FormatTimestamp(timestamp)
+			formattedPrefix := formatter.FormatNetworkPrefix()
+			formattedSymbol := formatter.Colorize(methodColor, methodSymbol)
+			formattedMethod := formatter.Colorize(methodColor, method)
+			formattedStatus := formatter.Colorize(statusColor, fmt.Sprintf("%d", status))
+			line := fmt.Sprintf("[%s] %s %s %s %s %s\n",
+				formattedTimestamp,
+				formattedPrefix,
+				formattedSymbol,
+				formattedMethod,
+				url,
+				formattedStatus)
 			_ = helpers.WriteOutput(cfg, line)
 		}
 		if err := helpers.StreamLogsRealTime(cfg, ctx, url, onLog, onNet); err != nil {

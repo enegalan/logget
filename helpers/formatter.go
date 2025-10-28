@@ -128,3 +128,38 @@ func (f *OutputFormatter) FormatSuccessMessage(message string) string {
 func (f *OutputFormatter) FormatErrorMessage(message string) string {
 	return f.theme.FormatError(message) + "\n"
 }
+
+// GetLogLevelColor returns the color for a log level
+func (f *OutputFormatter) GetLogLevelColor(level string) string {
+	return f.theme.GetLogLevelColor(level)
+}
+
+// GetHTTPMethodColor returns the color for an HTTP method
+func (f *OutputFormatter) GetHTTPMethodColor(method string) string {
+	return f.theme.GetHTTPMethodColor(method)
+}
+
+// GetStatusColor returns the color for an HTTP status code
+func (f *OutputFormatter) GetStatusColor(statusCode int) string {
+	return f.theme.GetStatusColor(statusCode)
+}
+
+// FormatTimestamp formats a timestamp with the theme
+func (f *OutputFormatter) FormatTimestamp(timestamp string) string {
+	return f.theme.FormatTimestamp(timestamp)
+}
+
+// FormatConsolePrefix formats the CONSOLE prefix
+func (f *OutputFormatter) FormatConsolePrefix() string {
+	return f.theme.FormatConsolePrefix()
+}
+
+// FormatNetworkPrefix formats the NETWORK prefix
+func (f *OutputFormatter) FormatNetworkPrefix() string {
+	return f.theme.FormatNetworkPrefix()
+}
+
+// Colorize applies color to text using the theme
+func (f *OutputFormatter) Colorize(color, text string) string {
+	return f.theme.Colorize(color, text)
+}
