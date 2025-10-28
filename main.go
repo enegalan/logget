@@ -8,7 +8,6 @@ import (
 	"log"
 	helpers "logget/helpers"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -127,14 +126,13 @@ func processURL(url string) {
 		logger.PrintUsage()
 		os.Exit(0)
 	}
-	// Validate URL
+	// Validate and normalize URL
 	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
 		url = "https://" + url
 	}
-	// Create context with timeout
+	// Create browser context
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
 	defer cancel()
-	// Create chromedp context
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.Flag("headless", true),
 		chromedp.Flag("disable-gpu", true),
@@ -149,7 +147,6 @@ func processURL(url string) {
 		chromedp.Flag("allow-running-insecure-content", true),
 		chromedp.Flag("disable-certificate-verification", true),
 	)
-	// SSL bypass flags
 	if skipSSLVerify {
 		opts = append(opts,
 			chromedp.Flag("ignore-certificate-errors-spki-list", true),
@@ -157,8 +154,8 @@ func processURL(url string) {
 			chromedp.Flag("ignore-certificate-errors", true),
 		)
 	}
-	allocCtx, cancel := chromedp.NewExecAllocator(ctx, opts...)
-	defer cancel()
+	allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, opts...)
+	defer allocCancel()
 	ctx, cancel = chromedp.NewContext(allocCtx)
 	defer cancel()
 	initialProtocol, initialStatusCode, err := helpers.GetInitialResponse(cfg, url)
@@ -172,25 +169,19 @@ func processURL(url string) {
 	var network []NetworkEntry
 	var responseProtocol string = initialProtocol
 	var responseStatusCode int = initialStatusCode
-	responseHeaders = make(map[string]string) // Initialize response headers map
-	responseCaptured = false                  // Reset flag
+	responseHeaders = make(map[string]string)
+	responseCaptured = false
 	startTime := time.Now()
 	logger.Progress("Initializing browser context...")
 	if showLogs {
 		logger.Progress("Enabling console log monitoring...")
-		err := chromedp.Run(ctx, cdplog.Enable())
-		if err != nil {
-			logger.Fatal("Failed to enable log domain: %v", err)
-		}
-		err = chromedp.Run(ctx, runtime.Enable())
-		if err != nil {
-			logger.Fatal("Failed to enable runtime domain: %v", err)
+		if err := chromedp.Run(ctx, cdplog.Enable(), runtime.Enable()); err != nil {
+			logger.Fatal("Failed to enable log domains: %v", err)
 		}
 	}
 	if showNetwork || verbose {
 		logger.Progress("Enabling network monitoring...")
-		err := chromedp.Run(ctx, cdpnetwork.Enable())
-		if err != nil {
+		if err := chromedp.Run(ctx, cdpnetwork.Enable()); err != nil {
 			logger.Error("Failed to enable network domain: %v", err)
 		}
 	}
@@ -210,11 +201,10 @@ func processURL(url string) {
 				var message string
 				for _, arg := range ev.Args {
 					if arg.Value != nil {
-						// Try to unmarshal as string first
 						var str string
 						if err := json.Unmarshal(arg.Value, &str); err == nil {
 							message += str + " "
-						} else { // If not a string, convert to string representation
+						} else {
 							message += fmt.Sprintf("%v ", arg.Value)
 						}
 					}
@@ -231,7 +221,6 @@ func processURL(url string) {
 		if showNetwork || verbose {
 			if ev, ok := ev.(*cdpnetwork.EventResponseReceived); ok {
 				response := ev.Response
-				// Convert headers to map
 				headers := make(map[string]string)
 				for name, value := range response.Headers {
 					if str, ok := value.(string); ok {
@@ -261,16 +250,14 @@ func processURL(url string) {
 	// Set cookies if provided
 	if len(cookies) > 0 {
 		logger.Progress("Setting cookies...")
-		err := helpers.SetCookies(ctx, url, cookies)
-		if err != nil {
+		if err := helpers.SetCookies(ctx, url, cookies); err != nil {
 			logger.Fatal("Failed to set cookies: %v", err)
 		}
 	}
-	// Navigate to the page
+	// Handle follow mode
 	if followMode {
 		logger.Progress("Streaming logs from %s (Press Ctrl+C to stop)", url)
-		var filterRegex *regexp.Regexp
-		var excludeRegex *regexp.Regexp
+		var filterRegex, excludeRegex *regexp.Regexp
 		if filterPattern != "" {
 			if r, err := regexp.Compile(filterPattern); err == nil {
 				filterRegex = r
@@ -290,40 +277,7 @@ func processURL(url string) {
 				_ = helpers.WriteOutput(cfg, string(b)+"\n")
 				return
 			}
-			timestamp := le.Time.Format("15:04:05")
-			level := strings.ToUpper(le.Level)
-			message := le.Message
-			levelColor := formatter.GetLogLevelColor(level)
-			var levelSymbol string
-			switch level {
-			case "DEBUG":
-				levelSymbol = "🐛"
-			case "INFO":
-				levelSymbol = "ℹ️"
-			case "WARN", "WARNING":
-				levelSymbol = "⚠️"
-			case "ERROR":
-				levelSymbol = "❌"
-			case "FATAL":
-				levelSymbol = "💀"
-			case "LOG":
-				levelSymbol = "📝"
-			case "TRACE":
-				levelSymbol = "🔍"
-			default:
-				levelSymbol = "📋"
-			}
-			formattedTimestamp := formatter.FormatTimestamp(timestamp)
-			formattedPrefix := formatter.FormatConsolePrefix()
-			formattedSymbol := formatter.Colorize(levelColor, levelSymbol)
-			formattedLevel := formatter.Colorize(levelColor, level)
-			line := fmt.Sprintf("[%s] %s %s %s: %s\n",
-				formattedTimestamp,
-				formattedPrefix,
-				formattedSymbol,
-				formattedLevel,
-				message)
-			_ = helpers.WriteOutput(cfg, line)
+			formatter.FormatAndOutputLog(le, cfg)
 		}
 		onNet := func(ne helpers.NetworkEntry) {
 			if !helpers.ShouldShowLine(ne.URL, filterRegex, excludeRegex) {
@@ -334,40 +288,7 @@ func processURL(url string) {
 				_ = helpers.WriteOutput(cfg, string(b)+"\n")
 				return
 			}
-			timestamp := ne.Timestamp.Format("15:04:05")
-			method := ne.Method
-			url := ne.URL
-			status := ne.Status
-			methodColor := formatter.GetHTTPMethodColor(method)
-			var methodSymbol string
-			switch method {
-			case "GET":
-				methodSymbol = "📥"
-			case "POST":
-				methodSymbol = "📤"
-			case "PUT":
-				methodSymbol = "🔄"
-			case "DELETE":
-				methodSymbol = "🗑️"
-			case "PATCH":
-				methodSymbol = "🔧"
-			default:
-				methodSymbol = "🌐"
-			}
-			statusColor := formatter.GetStatusColor(status)
-			formattedTimestamp := formatter.FormatTimestamp(timestamp)
-			formattedPrefix := formatter.FormatNetworkPrefix()
-			formattedSymbol := formatter.Colorize(methodColor, methodSymbol)
-			formattedMethod := formatter.Colorize(methodColor, method)
-			formattedStatus := formatter.Colorize(statusColor, fmt.Sprintf("%d", status))
-			line := fmt.Sprintf("[%s] %s %s %s %s %s\n",
-				formattedTimestamp,
-				formattedPrefix,
-				formattedSymbol,
-				formattedMethod,
-				url,
-				formattedStatus)
-			_ = helpers.WriteOutput(cfg, line)
+			formatter.FormatAndOutputNetwork(ne, cfg)
 		}
 		if err := helpers.StreamLogsRealTime(cfg, ctx, url, onLog, onNet); err != nil {
 			logger.Fatal("Error streaming logs: %v", err)
@@ -377,11 +298,9 @@ func processURL(url string) {
 	logger.Progress("Navigating to %s...", url)
 	tasks := []chromedp.Action{
 		chromedp.Navigate(url),
-		chromedp.Sleep(time.Duration(wait) * time.Second), // Wait for the page to load
+		chromedp.Sleep(time.Duration(wait) * time.Second),
 	}
-	// Execute tasks
-	err = chromedp.Run(ctx, tasks...)
-	if err != nil { // For HTTP error responses, show basic info before failing
+	if err = chromedp.Run(ctx, tasks...); err != nil {
 		if strings.Contains(err.Error(), "ERR_HTTP_RESPONSE_CODE_FAILURE") {
 			if verbose {
 				fmt.Printf("%s Error (navigation failed)\n", responseProtocol)
@@ -407,55 +326,30 @@ func processURL(url string) {
 		if err != nil {
 			logger.Fatal("Failed to marshal JSON: %v", err)
 		}
-		err = helpers.WriteOutput(cfg, string(jsonData)+"\n")
-		if err != nil {
+		if err = helpers.WriteOutput(cfg, string(jsonData)+"\n"); err != nil {
 			logger.Fatal("Failed to write output: %v", err)
 		}
 		if cfg.OutputFile != "" {
-			var filePath string
-			if cfg.OutputDir != "" {
-				filePath = filepath.Join(cfg.OutputDir, cfg.OutputFile)
-			} else {
-				filePath = cfg.OutputFile
-			}
-			if cfg.AppendMode {
-				logger.Success("JSON output appended to: %s", filePath)
-			} else {
-				logger.Success("JSON output written to: %s", filePath)
-			}
+			helpers.LogOutputFileSuccess(cfg, "JSON output", logger)
 		}
 	} else {
 		var outputContent strings.Builder
-		// HTTP Response section
 		if verbose {
 			outputContent.WriteString(formatter.FormatHTTPResponse(responseProtocol, statusCode, duration))
 			outputContent.WriteString(formatter.FormatRequestHeaders(helpers.GenerateDynamicHeaders(cfg, url)))
 			outputContent.WriteString(formatter.FormatResponseHeaders(responseHeaders))
 		}
-		// Console logs section
 		if showLogs && len(logs) > 0 {
 			outputContent.WriteString(formatter.FormatConsoleLogs(logs))
 		}
-		// Network requests section
 		if showNetwork && len(network) > 0 {
 			outputContent.WriteString(formatter.FormatNetworkRequests(network))
 		}
-		err := helpers.WriteOutput(cfg, outputContent.String())
-		if err != nil {
+		if err = helpers.WriteOutput(cfg, outputContent.String()); err != nil {
 			logger.Fatal("Failed to write output: %v", err)
 		}
 		if cfg.OutputFile != "" {
-			var filePath string
-			if cfg.OutputDir != "" {
-				filePath = filepath.Join(cfg.OutputDir, cfg.OutputFile)
-			} else {
-				filePath = cfg.OutputFile
-			}
-			if cfg.AppendMode {
-				logger.Success("Output appended to: %s", filePath)
-			} else {
-				logger.Success("Output written to: %s", filePath)
-			}
+			helpers.LogOutputFileSuccess(cfg, "Output", logger)
 		}
 	}
 }

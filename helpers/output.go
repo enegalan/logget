@@ -36,3 +36,17 @@ func WriteOutput(cfg Config, content string) error {
 	fmt.Print(content)
 	return nil
 }
+
+func LogOutputFileSuccess(cfg Config, outputType string, logger *Logger) {
+	var filePath string
+	if cfg.OutputDir != "" {
+		filePath = filepath.Join(cfg.OutputDir, cfg.OutputFile)
+	} else {
+		filePath = cfg.OutputFile
+	}
+	if cfg.AppendMode {
+		logger.Success("%s appended to: %s", outputType, filePath)
+	} else {
+		logger.Success("%s written to: %s", outputType, filePath)
+	}
+}

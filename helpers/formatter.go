@@ -153,3 +153,77 @@ func (f *OutputFormatter) FormatNetworkPrefix() string {
 func (f *OutputFormatter) Colorize(color, text string) string {
 	return f.theme.Colorize(color, text)
 }
+
+func (f *OutputFormatter) FormatAndOutputLog(le LogEntry, cfg Config) {
+	timestamp := le.Time.Format("15:04:05")
+	level := strings.ToUpper(le.Level)
+	message := le.Message
+	levelColor := f.GetLogLevelColor(level)
+	var levelSymbol string
+	switch level {
+	case "DEBUG":
+		levelSymbol = "🐛"
+	case "INFO":
+		levelSymbol = "ℹ️"
+	case "WARN", "WARNING":
+		levelSymbol = "⚠️"
+	case "ERROR":
+		levelSymbol = "❌"
+	case "FATAL":
+		levelSymbol = "💀"
+	case "LOG":
+		levelSymbol = "📝"
+	case "TRACE":
+		levelSymbol = "🔍"
+	default:
+		levelSymbol = "📋"
+	}
+	formattedTimestamp := f.FormatTimestamp(timestamp)
+	formattedPrefix := f.FormatConsolePrefix()
+	formattedSymbol := f.Colorize(levelColor, levelSymbol)
+	formattedLevel := f.Colorize(levelColor, level)
+	line := fmt.Sprintf("[%s] %s %s %s: %s\n",
+		formattedTimestamp,
+		formattedPrefix,
+		formattedSymbol,
+		formattedLevel,
+		message)
+	_ = WriteOutput(cfg, line)
+}
+
+func (f *OutputFormatter) FormatAndOutputNetwork(ne NetworkEntry, cfg Config) {
+	timestamp := ne.Timestamp.Format("15:04:05")
+	method := ne.Method
+	url := ne.URL
+	status := ne.Status
+	methodColor := f.GetHTTPMethodColor(method)
+	var methodSymbol string
+	switch method {
+	case "GET":
+		methodSymbol = "📥"
+	case "POST":
+		methodSymbol = "📤"
+	case "PUT":
+		methodSymbol = "🔄"
+	case "DELETE":
+		methodSymbol = "🗑️"
+	case "PATCH":
+		methodSymbol = "🔧"
+	default:
+		methodSymbol = "🌐"
+	}
+	statusColor := f.GetStatusColor(status)
+	formattedTimestamp := f.FormatTimestamp(timestamp)
+	formattedPrefix := f.FormatNetworkPrefix()
+	formattedSymbol := f.Colorize(methodColor, methodSymbol)
+	formattedMethod := f.Colorize(methodColor, method)
+	formattedStatus := f.Colorize(statusColor, fmt.Sprintf("%d", status))
+	line := fmt.Sprintf("[%s] %s %s %s %s %s\n",
+		formattedTimestamp,
+		formattedPrefix,
+		formattedSymbol,
+		formattedMethod,
+		url,
+		formattedStatus)
+	_ = WriteOutput(cfg, line)
+}
