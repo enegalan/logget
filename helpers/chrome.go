@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -121,7 +120,7 @@ func StreamLogsRealTime(cfg Config, ctx context.Context, url string, onLog func(
 	})
 	if len(cfg.Cookies) > 0 {
 		if err := SetCookies(ctx, url, cfg.Cookies); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to set cookies: %v\n", err)
+			return fmt.Errorf("failed to set cookies: %v", err)
 		}
 	}
 	if err := chromedp.Run(ctx, chromedp.Navigate(url)); err != nil {

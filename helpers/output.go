@@ -31,11 +31,6 @@ func WriteOutput(cfg Config, content string) error {
 		if _, err = file.WriteString(content); err != nil {
 			return fmt.Errorf("failed to write to output file: %v", err)
 		}
-		if cfg.AppendMode {
-			fmt.Fprintf(os.Stderr, "Output appended to: %s\n", filePath)
-		} else {
-			fmt.Fprintf(os.Stderr, "Output written to: %s\n", filePath)
-		}
 		return nil
 	}
 	fmt.Print(content)

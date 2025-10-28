@@ -8,6 +8,7 @@ import (
 	"log"
 	helpers "logget/helpers"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -53,10 +54,15 @@ var (
 	refreshInterval int
 
 	skipSSLVerify bool
+
+	logger    *helpers.Logger
+	formatter *helpers.OutputFormatter
 )
 
 func main() {
 	log.SetOutput(io.Discard)
+	logger = helpers.NewLogger(verbose, true)
+	formatter = helpers.NewOutputFormatter(true)
 	var rootCmd = &cobra.Command{
 		Use:   "logget [flags] <url>",
 		Short: "Extract logs and network data from web pages",
@@ -90,14 +96,12 @@ func main() {
 
 func runLogget(cmd *cobra.Command, args []string) {
 	if versionFlag {
-		fmt.Printf("logget %s\n", version)
-		fmt.Printf("A command-line tool for extracting browser logs and network data from web pages\n")
+		logger.PrintHeader(version)
 		os.Exit(0)
 	}
 	if len(args) == 0 {
-		fmt.Fprintf(os.Stderr, "Error: URL is required\n")
-		fmt.Fprintf(os.Stderr, "Usage: logget [flags] <url>\n")
-		fmt.Fprintf(os.Stderr, "Use 'logget --help' for more information\n")
+		logger.PrintError(fmt.Errorf("URL is required"))
+		logger.PrintUsage()
 		os.Exit(1)
 	}
 	url := args[0]
@@ -120,7 +124,7 @@ func processURL(url string) {
 	}
 	// Quick check: if no data collection flags are specified, show help immediately
 	if !showLogs && !showNetwork && !verbose && !jsonOutput && !followMode {
-		fmt.Println("logget: try 'logget --help' or 'logget -h' for more information")
+		logger.PrintUsage()
 		os.Exit(0)
 	}
 	// Validate URL
@@ -161,7 +165,7 @@ func processURL(url string) {
 	// Get initial response to capture redirect information
 	initialProtocol, initialStatusCode, err := helpers.GetInitialResponse(cfg, url)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: Failed to get initial response: %v\n", err)
+		logger.Warn("Failed to get initial response: %v", err)
 		// Fallback to defaults
 		initialProtocol = "HTTP/1.1"
 		initialStatusCode = 200
@@ -174,26 +178,27 @@ func processURL(url string) {
 	responseHeaders = make(map[string]string) // Initialize response headers map
 	responseCaptured = false                  // Reset flag
 	startTime := time.Now()
+	logger.Progress("Initializing browser context...")
 	// Enable CDP domains and set up event listeners
 	if showLogs {
+		logger.Progress("Enabling console log monitoring...")
 		// Enable the log domain for browser logs
 		err := chromedp.Run(ctx, cdplog.Enable())
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to enable log domain: %v\n", err)
-			os.Exit(1)
+			logger.Fatal("Failed to enable log domain: %v", err)
 		}
 		// Enable runtime domain for JavaScript console logs
 		err = chromedp.Run(ctx, runtime.Enable())
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to enable runtime domain: %v\n", err)
-			os.Exit(1)
+			logger.Fatal("Failed to enable runtime domain: %v", err)
 		}
 	}
 	if showNetwork || verbose {
+		logger.Progress("Enabling network monitoring...")
 		// Enable network domain for network monitoring or protocol detection
 		err := chromedp.Run(ctx, cdpnetwork.Enable())
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to enable network domain: %v\n", err)
+			logger.Error("Failed to enable network domain: %v", err)
 		}
 	}
 	// Set up event listeners for both logs and network
@@ -263,15 +268,15 @@ func processURL(url string) {
 	})
 	// Set cookies if provided
 	if len(cookies) > 0 {
+		logger.Progress("Setting cookies...")
 		err := helpers.SetCookies(ctx, url, cookies)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to set cookies: %v\n", err)
-			os.Exit(1)
+			logger.Fatal("Failed to set cookies: %v", err)
 		}
 	}
 	// Navigate to the page
 	if followMode {
-		fmt.Fprintf(os.Stderr, "Streaming logs from %s (Press Ctrl+C to stop)\n", url)
+		logger.Progress("Streaming logs from %s (Press Ctrl+C to stop)", url)
 		var filterRegex *regexp.Regexp
 		var excludeRegex *regexp.Regexp
 		if filterPattern != "" {
@@ -309,11 +314,11 @@ func processURL(url string) {
 			_ = helpers.WriteOutput(cfg, line)
 		}
 		if err := helpers.StreamLogsRealTime(cfg, ctx, url, onLog, onNet); err != nil {
-			fmt.Fprintf(os.Stderr, "Error streaming logs: %v\n", err)
-			os.Exit(1)
+			logger.Fatal("Error streaming logs: %v", err)
 		}
 		return
 	}
+	logger.Progress("Navigating to %s...", url)
 	tasks := []chromedp.Action{
 		chromedp.Navigate(url),
 		chromedp.Sleep(time.Duration(wait) * time.Second), // Wait for the page to load
@@ -328,13 +333,12 @@ func processURL(url string) {
 				fmt.Printf("Duration: %v\n", time.Since(startTime))
 				fmt.Println()
 			}
-			fmt.Printf("Error: %v\n", err)
-			os.Exit(1)
+			logger.Fatal("Navigation failed: %v", err)
 		} else {
-			fmt.Fprintf(os.Stderr, "Failed to navigate to %s: %v\n", url, err)
-			os.Exit(1)
+			logger.Fatal("Failed to navigate to %s: %v", url, err)
 		}
 	}
+	logger.Success("Successfully loaded page: %s", url)
 	// Use the status code we captured from the initial response
 	statusCode := responseStatusCode
 	duration := time.Since(startTime)
@@ -349,58 +353,57 @@ func processURL(url string) {
 	if jsonOutput {
 		jsonData, err := json.MarshalIndent(output, "", "  ")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to marshal JSON: %v\n", err)
-			os.Exit(1)
+			logger.Fatal("Failed to marshal JSON: %v", err)
 		}
 		err = helpers.WriteOutput(cfg, string(jsonData)+"\n")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to write output: %v\n", err)
-			os.Exit(1)
+			logger.Fatal("Failed to write output: %v", err)
+		}
+		if cfg.OutputFile != "" {
+			var filePath string
+			if cfg.OutputDir != "" {
+				filePath = filepath.Join(cfg.OutputDir, cfg.OutputFile)
+			} else {
+				filePath = cfg.OutputFile
+			}
+			if cfg.AppendMode {
+				logger.Success("JSON output appended to: %s", filePath)
+			} else {
+				logger.Success("JSON output written to: %s", filePath)
+			}
 		}
 	} else {
-		// Human-readable output
 		var outputContent strings.Builder
+		// HTTP Response section
 		if verbose {
-			outputContent.WriteString(fmt.Sprintf("%s %d\n", responseProtocol, statusCode))
-			outputContent.WriteString(fmt.Sprintf("Duration: %v\n", output.Duration))
-			outputContent.WriteString("\n")
-			outputContent.WriteString("=== REQUEST HEADERS ===\n")
-			dynamicHeaders := helpers.GenerateDynamicHeaders(cfg, url)
-			for _, header := range dynamicHeaders {
-				outputContent.WriteString(fmt.Sprintf("%s\n", header))
-			}
-			outputContent.WriteString("\n")
-			if len(responseHeaders) > 0 {
-				outputContent.WriteString("=== RESPONSE HEADERS ===\n")
-				for name, value := range responseHeaders {
-					outputContent.WriteString(fmt.Sprintf("%s: %s\n", name, value))
-				}
-				outputContent.WriteString("\n")
-			}
+			outputContent.WriteString(formatter.FormatHTTPResponse(responseProtocol, statusCode, duration))
+			outputContent.WriteString(formatter.FormatRequestHeaders(helpers.GenerateDynamicHeaders(cfg, url)))
+			outputContent.WriteString(formatter.FormatResponseHeaders(responseHeaders))
 		}
+		// Console logs section
 		if showLogs && len(logs) > 0 {
-			outputContent.WriteString("=== CONSOLE LOGS ===\n")
-			for _, log := range logs {
-				outputContent.WriteString(fmt.Sprintf("[%s] %s: %s\n", log.Time.Format("15:04:05"), strings.ToUpper(log.Level), log.Message))
-			}
-			outputContent.WriteString("\n")
+			outputContent.WriteString(formatter.FormatConsoleLogs(logs))
 		}
+		// Network requests section
 		if showNetwork && len(network) > 0 {
-			outputContent.WriteString("=== NETWORK REQUESTS ===\n")
-			for _, net := range network {
-				outputContent.WriteString(fmt.Sprintf("%s %s -> %d\n", net.Method, net.URL, net.Status))
-				if len(net.Headers) > 0 {
-					for k, v := range net.Headers {
-						outputContent.WriteString(fmt.Sprintf("  %s: %s\n", k, v))
-					}
-				}
-				outputContent.WriteString("\n")
-			}
+			outputContent.WriteString(formatter.FormatNetworkRequests(network))
 		}
 		err := helpers.WriteOutput(cfg, outputContent.String())
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to write output: %v\n", err)
-			os.Exit(1)
+			logger.Fatal("Failed to write output: %v", err)
+		}
+		if cfg.OutputFile != "" {
+			var filePath string
+			if cfg.OutputDir != "" {
+				filePath = filepath.Join(cfg.OutputDir, cfg.OutputFile)
+			} else {
+				filePath = cfg.OutputFile
+			}
+			if cfg.AppendMode {
+				logger.Success("Output appended to: %s", filePath)
+			} else {
+				logger.Success("Output written to: %s", filePath)
+			}
 		}
 	}
 }
