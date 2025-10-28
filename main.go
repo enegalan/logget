@@ -159,14 +159,11 @@ func processURL(url string) {
 	}
 	allocCtx, cancel := chromedp.NewExecAllocator(ctx, opts...)
 	defer cancel()
-	// Create context
 	ctx, cancel = chromedp.NewContext(allocCtx)
 	defer cancel()
-	// Get initial response to capture redirect information
 	initialProtocol, initialStatusCode, err := helpers.GetInitialResponse(cfg, url)
 	if err != nil {
 		logger.Warn("Failed to get initial response: %v", err)
-		// Fallback to defaults
 		initialProtocol = "HTTP/1.1"
 		initialStatusCode = 200
 	}
@@ -179,15 +176,12 @@ func processURL(url string) {
 	responseCaptured = false                  // Reset flag
 	startTime := time.Now()
 	logger.Progress("Initializing browser context...")
-	// Enable CDP domains and set up event listeners
 	if showLogs {
 		logger.Progress("Enabling console log monitoring...")
-		// Enable the log domain for browser logs
 		err := chromedp.Run(ctx, cdplog.Enable())
 		if err != nil {
 			logger.Fatal("Failed to enable log domain: %v", err)
 		}
-		// Enable runtime domain for JavaScript console logs
 		err = chromedp.Run(ctx, runtime.Enable())
 		if err != nil {
 			logger.Fatal("Failed to enable runtime domain: %v", err)
@@ -195,13 +189,11 @@ func processURL(url string) {
 	}
 	if showNetwork || verbose {
 		logger.Progress("Enabling network monitoring...")
-		// Enable network domain for network monitoring or protocol detection
 		err := chromedp.Run(ctx, cdpnetwork.Enable())
 		if err != nil {
 			logger.Error("Failed to enable network domain: %v", err)
 		}
 	}
-	// Set up event listeners for both logs and network
 	chromedp.ListenTarget(ctx, func(ev interface{}) {
 		// Browser logs
 		if showLogs {
@@ -389,8 +381,7 @@ func processURL(url string) {
 	}
 	// Execute tasks
 	err = chromedp.Run(ctx, tasks...)
-	if err != nil {
-		// For HTTP error responses, show basic info before failing
+	if err != nil { // For HTTP error responses, show basic info before failing
 		if strings.Contains(err.Error(), "ERR_HTTP_RESPONSE_CODE_FAILURE") {
 			if verbose {
 				fmt.Printf("%s Error (navigation failed)\n", responseProtocol)
@@ -403,17 +394,14 @@ func processURL(url string) {
 		}
 	}
 	logger.Success("Successfully loaded page: %s", url)
-	// Use the status code we captured from the initial response
 	statusCode := responseStatusCode
 	duration := time.Since(startTime)
-	// Prepare output data
 	output := OutputData{
 		URL:      url,
 		Logs:     logs,
 		Network:  network,
 		Duration: duration,
 	}
-	// Output results
 	if jsonOutput {
 		jsonData, err := json.MarshalIndent(output, "", "  ")
 		if err != nil {
