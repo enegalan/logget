@@ -19,4 +19,5 @@ type Config struct {
 	FontOnly       bool
 	ImgOnly        bool
 	MediaOnly      bool
+	ManifestOnly   bool
 }

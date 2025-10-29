@@ -67,6 +67,11 @@ func ShouldIncludeNetworkEvent(cfg Config, ev *cdpnetwork.EventResponseReceived)
 			return false
 		}
 	}
+	if cfg.ManifestOnly {
+		if ev.Type != cdpnetwork.ResourceTypeManifest {
+			return false
+		}
+	}
 	return true
 }
 

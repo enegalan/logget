@@ -65,6 +65,7 @@ var (
 	fontOnly     bool
 	imgOnly      bool
 	mediaOnly    bool
+	manifestOnly bool
 )
 
 func main() {
@@ -103,6 +104,7 @@ func main() {
 	rootCmd.Flags().BoolVar(&fontOnly, "font", false, "Only include Font requests")
 	rootCmd.Flags().BoolVar(&imgOnly, "img", false, "Only include Image requests")
 	rootCmd.Flags().BoolVar(&mediaOnly, "media", false, "Only include Media requests")
+	rootCmd.Flags().BoolVar(&manifestOnly, "manifest", false, "Only include Manifest requests")
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -143,6 +145,7 @@ func processURL(url string) {
 		FontOnly:       fontOnly,
 		ImgOnly:        imgOnly,
 		MediaOnly:      mediaOnly,
+		ManifestOnly:   manifestOnly,
 	}
 	// Quick check: if no data collection flags are specified, show help immediately
 	if !showLogs && !showNetwork && !verbose && !jsonOutput && !followMode {
