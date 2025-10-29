@@ -8,8 +8,10 @@ import (
 	"log"
 	helpers "logget/helpers"
 	"os"
+	"os/signal"
 	"regexp"
 	"strings"
+	"syscall"
 	"time"
 
 	cdplog "github.com/chromedp/cdproto/log"
@@ -280,7 +282,9 @@ func processURL(url string) {
 			}
 			formatter.FormatAndOutputNetwork(ne, cfg)
 		}
-		if err := helpers.StreamLogsRealTime(cfg, ctx, url, onLog, onNet); err != nil {
+		sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		if err := helpers.StreamLogsRealTime(cfg, sigCtx, url, onLog, onNet); err != nil {
 			logger.Fatal("Error streaming logs: %v", err)
 		}
 		return
