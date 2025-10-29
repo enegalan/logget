@@ -16,4 +16,5 @@ type Config struct {
 	DocumentOnly   bool
 	CssOnly        bool
 	ScriptOnly     bool
+	FontOnly       bool
 }

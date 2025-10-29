@@ -52,6 +52,11 @@ func ShouldIncludeNetworkEvent(cfg Config, ev *cdpnetwork.EventResponseReceived)
 			return false
 		}
 	}
+	if cfg.FontOnly {
+		if ev.Type != cdpnetwork.ResourceTypeFont {
+			return false
+		}
+	}
 	return true
 }
 
