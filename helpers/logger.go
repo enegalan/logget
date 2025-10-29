@@ -115,12 +115,12 @@ func (l *Logger) PrintHeader(version string) {
 	topBorder := l.theme.FormatBorder("┌─────────────────────────────────────────────────────────────┐")
 	fmt.Fprintf(os.Stderr, "%s\n", topBorder)
 	// Title line
-	titleSpaces := strings.Repeat(" ", 45-len(version))
+	titleSpaces := strings.Repeat(" ", 51-len(version))
 	titleLine := fmt.Sprintf("│ logget v%s%s │", version, titleSpaces)
 	formattedTitleLine := l.theme.FormatBorder(titleLine)
 	fmt.Fprintf(os.Stderr, "%s\n", formattedTitleLine)
 	// Subtitle line
-	subtitleSpaces := strings.Repeat(" ", 20)
+	subtitleSpaces := strings.Repeat(" ", 21)
 	subtitleLine := fmt.Sprintf("│ Web Log & Network Data Extraction Tool %s│", subtitleSpaces)
 	formattedSubtitleLine := l.theme.FormatBorder(subtitleLine)
 	fmt.Fprintf(os.Stderr, "%s\n", formattedSubtitleLine)
