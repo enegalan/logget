@@ -21,4 +21,5 @@ type Config struct {
 	MediaOnly      bool
 	ManifestOnly   bool
 	WebSocketOnly  bool
+	WasmOnly       bool
 }

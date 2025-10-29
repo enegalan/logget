@@ -77,6 +77,11 @@ func ShouldIncludeNetworkEvent(cfg Config, ev *cdpnetwork.EventResponseReceived)
 			return false
 		}
 	}
+	if cfg.WasmOnly {
+		if ev.Response == nil || strings.ToLower(string(ev.Response.MimeType)) != "application/wasm" {
+			return false
+		}
+	}
 	return true
 }
 
