@@ -133,11 +133,13 @@ func StreamLogsRealTime(cfg Config, ctx context.Context, url string, onLog func(
 	defer cancel()
 	ctx, cancel = chromedp.NewContext(allocCtx)
 	defer cancel()
-	if err := chromedp.Run(ctx, cdplog.Enable()); err != nil {
-		return fmt.Errorf("failed to enable log domain: %v", err)
-	}
-	if err := chromedp.Run(ctx, runtime.Enable()); err != nil {
-		return fmt.Errorf("failed to enable runtime domain: %v", err)
+	if cfg.ShowLogs {
+		if err := chromedp.Run(ctx, cdplog.Enable()); err != nil {
+			return fmt.Errorf("failed to enable log domain: %v", err)
+		}
+		if err := chromedp.Run(ctx, runtime.Enable()); err != nil {
+			return fmt.Errorf("failed to enable runtime domain: %v", err)
+		}
 	}
 	if cfg.ShowNetwork {
 		if err := chromedp.Run(ctx, cdpnetwork.Enable()); err != nil {
@@ -145,32 +147,34 @@ func StreamLogsRealTime(cfg Config, ctx context.Context, url string, onLog func(
 		}
 	}
 	chromedp.ListenTarget(ctx, func(ev interface{}) {
-		if ev, ok := ev.(*cdplog.EventEntryAdded); ok {
-			onLog(LogEntry{
-				Level:   ev.Entry.Level.String(),
-				Message: ev.Entry.Text,
-				Time:    time.Now(),
-				Source:  "browser",
-			})
-		}
-		if ev, ok := ev.(*runtime.EventConsoleAPICalled); ok {
-			var message string
-			for _, arg := range ev.Args {
-				if arg.Value != nil {
-					var str string
-					if err := json.Unmarshal(arg.Value, &str); err == nil {
-						message += str + " "
-					} else {
-						message += fmt.Sprintf("%v ", arg.Value)
+		if cfg.ShowLogs {
+			if ev, ok := ev.(*cdplog.EventEntryAdded); ok {
+				onLog(LogEntry{
+					Level:   ev.Entry.Level.String(),
+					Message: ev.Entry.Text,
+					Time:    time.Now(),
+					Source:  "browser",
+				})
+			}
+			if ev, ok := ev.(*runtime.EventConsoleAPICalled); ok {
+				var message string
+				for _, arg := range ev.Args {
+					if arg.Value != nil {
+						var str string
+						if err := json.Unmarshal(arg.Value, &str); err == nil {
+							message += str + " "
+						} else {
+							message += fmt.Sprintf("%v ", arg.Value)
+						}
 					}
 				}
+				onLog(LogEntry{
+					Level:   ev.Type.String(),
+					Message: strings.TrimSpace(message),
+					Time:    time.Now(),
+					Source:  "console",
+				})
 			}
-			onLog(LogEntry{
-				Level:   ev.Type.String(),
-				Message: strings.TrimSpace(message),
-				Time:    time.Now(),
-				Source:  "console",
-			})
 		}
 		if cfg.ShowNetwork {
 			if ev, ok := ev.(*cdpnetwork.EventResponseReceived); ok {

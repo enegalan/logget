@@ -9,6 +9,7 @@ type Config struct {
 	AppendMode     bool
 	SkipSSLVerify  bool
 	ShowNetwork    bool
+	ShowLogs       bool
 	JSONOutput     bool
 	FilterPattern  string
 	ExcludePattern string

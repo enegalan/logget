@@ -140,6 +140,7 @@ func processURL(url string) {
 		AppendMode:     appendMode,
 		SkipSSLVerify:  skipSSLVerify,
 		ShowNetwork:    showNetwork,
+		ShowLogs:       showLogs,
 		JSONOutput:     jsonOutput,
 		FilterPattern:  filterPattern,
 		ExcludePattern: excludePattern,
