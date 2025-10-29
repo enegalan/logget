@@ -61,6 +61,7 @@ var (
 	xhrOnly      bool
 	documentOnly bool
 	cssOnly      bool
+	scriptOnly   bool
 )
 
 func main() {
@@ -95,6 +96,7 @@ func main() {
 	rootCmd.Flags().BoolVar(&xhrOnly, "xhr", false, "Only include fetch/XHR requests")
 	rootCmd.Flags().BoolVar(&documentOnly, "document", false, "Only include Document requests")
 	rootCmd.Flags().BoolVar(&cssOnly, "css", false, "Only include CSS requests")
+	rootCmd.Flags().BoolVar(&scriptOnly, "script", false, "Only include Script requests")
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -131,6 +133,7 @@ func processURL(url string) {
 		XHROnly:        xhrOnly,
 		DocumentOnly:   documentOnly,
 		CssOnly:        cssOnly,
+		ScriptOnly:     scriptOnly,
 	}
 	// Quick check: if no data collection flags are specified, show help immediately
 	if !showLogs && !showNetwork && !verbose && !jsonOutput && !followMode {

@@ -15,4 +15,5 @@ type Config struct {
 	XHROnly        bool
 	DocumentOnly   bool
 	CssOnly        bool
+	ScriptOnly     bool
 }
