@@ -144,6 +144,25 @@ logget -k --network https://localhost:8080
 logget -k -f --logs --filter "ERROR" https://127.0.0.1:3000
 ```
 
+### Request Type Filtering Examples
+
+```bash
+# Only XHR/fetch requests
+logget --network --xhr https://example.com
+
+# Only images
+logget --network --img https://example.com
+
+# Only scripts and CSS
+logget --network --script --css https://example.com
+
+# Only WebSocket traffic
+logget --network --ws https://example.com
+
+# Only WebAssembly requests
+logget --network --wasm https://example.com
+```
+
 ### Options
 
 - `--logs`, `-L`: Capture and display console logs
@@ -164,6 +183,16 @@ logget -k -f --logs --filter "ERROR" https://127.0.0.1:3000
 - `--exclude`: Exclude logs/requests matching this regex pattern
 - `--refresh`: Refresh interval in milliseconds for real-time streaming (default: 100)
 - `--insecure`, `-k`: Skip SSL certificate verification (useful for self-signed certificates)
+- `--xhr`: Only include fetch/XHR requests
+- `--document`: Only include Document requests
+- `--css`: Only include CSS requests
+- `--script`: Only include Script requests
+- `--font`: Only include Font requests
+- `--img`: Only include Image requests
+- `--media`: Only include Media requests
+- `--manifest`: Only include Manifest requests
+- `--ws`, `--websocket`: Only include WebSocket requests
+- `--wasm`: Only include WebAssembly (application/wasm) requests
 
 ### File Output and Directory Organization
 
