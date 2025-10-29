@@ -63,6 +63,7 @@ var (
 	cssOnly      bool
 	scriptOnly   bool
 	fontOnly     bool
+	imgOnly      bool
 )
 
 func main() {
@@ -99,6 +100,7 @@ func main() {
 	rootCmd.Flags().BoolVar(&cssOnly, "css", false, "Only include CSS requests")
 	rootCmd.Flags().BoolVar(&scriptOnly, "script", false, "Only include Script requests")
 	rootCmd.Flags().BoolVar(&fontOnly, "font", false, "Only include Font requests")
+	rootCmd.Flags().BoolVar(&imgOnly, "img", false, "Only include Image requests")
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -137,6 +139,7 @@ func processURL(url string) {
 		CssOnly:        cssOnly,
 		ScriptOnly:     scriptOnly,
 		FontOnly:       fontOnly,
+		ImgOnly:        imgOnly,
 	}
 	// Quick check: if no data collection flags are specified, show help immediately
 	if !showLogs && !showNetwork && !verbose && !jsonOutput && !followMode {

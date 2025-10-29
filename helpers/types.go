@@ -17,4 +17,5 @@ type Config struct {
 	CssOnly        bool
 	ScriptOnly     bool
 	FontOnly       bool
+	ImgOnly        bool
 }
