@@ -13,4 +13,5 @@ type Config struct {
 	FilterPattern  string
 	ExcludePattern string
 	XHROnly        bool
+	DocumentOnly   bool
 }

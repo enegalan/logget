@@ -56,9 +56,10 @@ var (
 
 	skipSSLVerify bool
 
-	logger    *helpers.Logger
-	formatter *helpers.OutputFormatter
-	xhrOnly   bool
+	logger       *helpers.Logger
+	formatter    *helpers.OutputFormatter
+	xhrOnly      bool
+	documentOnly bool
 )
 
 func main() {
@@ -91,6 +92,7 @@ func main() {
 	rootCmd.Flags().IntVar(&refreshInterval, "refresh", 100, "Refresh interval in milliseconds for real-time streaming")
 	rootCmd.Flags().BoolVarP(&skipSSLVerify, "insecure", "k", false, "Skip SSL certificate verification (useful for self-signed certificates)")
 	rootCmd.Flags().BoolVar(&xhrOnly, "xhr", false, "Only include fetch/XHR requests")
+	rootCmd.Flags().BoolVar(&documentOnly, "document", false, "Only include Document requests")
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -125,6 +127,7 @@ func processURL(url string) {
 		FilterPattern:  filterPattern,
 		ExcludePattern: excludePattern,
 		XHROnly:        xhrOnly,
+		DocumentOnly:   documentOnly,
 	}
 	// Quick check: if no data collection flags are specified, show help immediately
 	if !showLogs && !showNetwork && !verbose && !jsonOutput && !followMode {
