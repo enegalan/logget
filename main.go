@@ -56,16 +56,17 @@ var (
 
 	skipSSLVerify bool
 
-	logger       *helpers.Logger
-	formatter    *helpers.OutputFormatter
-	xhrOnly      bool
-	documentOnly bool
-	cssOnly      bool
-	scriptOnly   bool
-	fontOnly     bool
-	imgOnly      bool
-	mediaOnly    bool
-	manifestOnly bool
+	logger        *helpers.Logger
+	formatter     *helpers.OutputFormatter
+	xhrOnly       bool
+	documentOnly  bool
+	cssOnly       bool
+	scriptOnly    bool
+	fontOnly      bool
+	imgOnly       bool
+	mediaOnly     bool
+	manifestOnly  bool
+	websocketOnly bool
 )
 
 func main() {
@@ -105,6 +106,8 @@ func main() {
 	rootCmd.Flags().BoolVar(&imgOnly, "img", false, "Only include Image requests")
 	rootCmd.Flags().BoolVar(&mediaOnly, "media", false, "Only include Media requests")
 	rootCmd.Flags().BoolVar(&manifestOnly, "manifest", false, "Only include Manifest requests")
+	rootCmd.Flags().BoolVar(&websocketOnly, "ws", false, "Only include WebSocket requests")
+	rootCmd.Flags().BoolVar(&websocketOnly, "websocket", false, "Only include WebSocket requests")
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -146,6 +149,7 @@ func processURL(url string) {
 		ImgOnly:        imgOnly,
 		MediaOnly:      mediaOnly,
 		ManifestOnly:   manifestOnly,
+		WebSocketOnly:  websocketOnly,
 	}
 	// Quick check: if no data collection flags are specified, show help immediately
 	if !showLogs && !showNetwork && !verbose && !jsonOutput && !followMode {

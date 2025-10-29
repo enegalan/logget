@@ -20,4 +20,5 @@ type Config struct {
 	ImgOnly        bool
 	MediaOnly      bool
 	ManifestOnly   bool
+	WebSocketOnly  bool
 }

@@ -72,6 +72,11 @@ func ShouldIncludeNetworkEvent(cfg Config, ev *cdpnetwork.EventResponseReceived)
 			return false
 		}
 	}
+	if cfg.WebSocketOnly {
+		if ev.Type != cdpnetwork.ResourceTypeWebSocket {
+			return false
+		}
+	}
 	return true
 }
 
