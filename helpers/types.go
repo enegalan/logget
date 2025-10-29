@@ -14,4 +14,5 @@ type Config struct {
 	ExcludePattern string
 	XHROnly        bool
 	DocumentOnly   bool
+	CssOnly        bool
 }

@@ -60,6 +60,7 @@ var (
 	formatter    *helpers.OutputFormatter
 	xhrOnly      bool
 	documentOnly bool
+	cssOnly      bool
 )
 
 func main() {
@@ -93,6 +94,7 @@ func main() {
 	rootCmd.Flags().BoolVarP(&skipSSLVerify, "insecure", "k", false, "Skip SSL certificate verification (useful for self-signed certificates)")
 	rootCmd.Flags().BoolVar(&xhrOnly, "xhr", false, "Only include fetch/XHR requests")
 	rootCmd.Flags().BoolVar(&documentOnly, "document", false, "Only include Document requests")
+	rootCmd.Flags().BoolVar(&cssOnly, "css", false, "Only include CSS requests")
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -128,6 +130,7 @@ func processURL(url string) {
 		ExcludePattern: excludePattern,
 		XHROnly:        xhrOnly,
 		DocumentOnly:   documentOnly,
+		CssOnly:        cssOnly,
 	}
 	// Quick check: if no data collection flags are specified, show help immediately
 	if !showLogs && !showNetwork && !verbose && !jsonOutput && !followMode {

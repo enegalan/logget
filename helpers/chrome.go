@@ -42,6 +42,11 @@ func ShouldIncludeNetworkEvent(cfg Config, ev *cdpnetwork.EventResponseReceived)
 			return false
 		}
 	}
+	if cfg.CssOnly {
+		if ev.Type != cdpnetwork.ResourceTypeStylesheet {
+			return false
+		}
+	}
 	return true
 }
 
