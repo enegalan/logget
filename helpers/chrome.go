@@ -21,13 +21,45 @@ type LogEntry struct {
 }
 
 type NetworkEntry struct {
-	URL       string            `json:"url"`
-	Method    string            `json:"method"`
-	Status    int               `json:"status"`
-	Headers   map[string]string `json:"headers"`
-	Timestamp time.Time         `json:"timestamp"`
-	Type      string            `json:"type"`
-	Size      int64             `json:"size"`
+	URL          string            `json:"url"`
+	Method       string            `json:"method"`
+	Status       int               `json:"status"`
+	Headers      map[string]string `json:"headers"`
+	Timestamp    time.Time         `json:"timestamp"`
+	Type         string            `json:"type"`
+	Size         int64             `json:"size"`
+	ResourceType string            `json:"resourceType"`
+}
+
+func ShouldIncludeNetworkEvent(cfg Config, ev *cdpnetwork.EventResponseReceived) bool {
+	if cfg.XHROnly {
+		if !(ev.Type == cdpnetwork.ResourceTypeXHR || ev.Type == cdpnetwork.ResourceTypeFetch) {
+			return false
+		}
+	}
+	return true
+}
+
+func BuildNetworkEntryFromEvent(ev *cdpnetwork.EventResponseReceived) NetworkEntry {
+	response := ev.Response
+	headers := make(map[string]string)
+	for name, value := range response.Headers {
+		if str, ok := value.(string); ok {
+			headers[name] = str
+		} else {
+			headers[name] = fmt.Sprintf("%v", value)
+		}
+	}
+	return NetworkEntry{
+		URL:          response.URL,
+		Method:       "GET",
+		Status:       int(response.Status),
+		Headers:      headers,
+		Timestamp:    time.Now(),
+		Type:         string(response.MimeType),
+		Size:         int64(response.EncodedDataLength),
+		ResourceType: ev.Type.String(),
+	}
 }
 
 func StreamLogsRealTime(cfg Config, ctx context.Context, url string, onLog func(LogEntry), onNet func(NetworkEntry)) error {
@@ -97,24 +129,10 @@ func StreamLogsRealTime(cfg Config, ctx context.Context, url string, onLog func(
 		}
 		if cfg.ShowNetwork {
 			if ev, ok := ev.(*cdpnetwork.EventResponseReceived); ok {
-				response := ev.Response
-				headers := make(map[string]string)
-				for name, value := range response.Headers {
-					if str, ok := value.(string); ok {
-						headers[name] = str
-					} else {
-						headers[name] = fmt.Sprintf("%v", value)
-					}
+				if !ShouldIncludeNetworkEvent(cfg, ev) {
+					return
 				}
-				onNet(NetworkEntry{
-					URL:       response.URL,
-					Method:    "GET",
-					Status:    int(response.Status),
-					Headers:   headers,
-					Timestamp: time.Now(),
-					Type:      string(response.MimeType),
-					Size:      int64(response.EncodedDataLength),
-				})
+				onNet(BuildNetworkEntryFromEvent(ev))
 			}
 		}
 	})

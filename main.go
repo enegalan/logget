@@ -56,6 +56,7 @@ var (
 
 	logger    *helpers.Logger
 	formatter *helpers.OutputFormatter
+	xhrOnly   bool
 )
 
 func main() {
@@ -87,6 +88,7 @@ func main() {
 	rootCmd.Flags().StringVar(&excludePattern, "exclude", "", "Exclude logs/requests matching this regex pattern")
 	rootCmd.Flags().IntVar(&refreshInterval, "refresh", 100, "Refresh interval in milliseconds for real-time streaming")
 	rootCmd.Flags().BoolVarP(&skipSSLVerify, "insecure", "k", false, "Skip SSL certificate verification (useful for self-signed certificates)")
+	rootCmd.Flags().BoolVar(&xhrOnly, "xhr", false, "Only include fetch/XHR requests")
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -120,6 +122,7 @@ func processURL(url string) {
 		JSONOutput:     jsonOutput,
 		FilterPattern:  filterPattern,
 		ExcludePattern: excludePattern,
+		XHROnly:        xhrOnly,
 	}
 	// Quick check: if no data collection flags are specified, show help immediately
 	if !showLogs && !showNetwork && !verbose && !jsonOutput && !followMode {
@@ -220,29 +223,16 @@ func processURL(url string) {
 		// Network events
 		if showNetwork || verbose {
 			if ev, ok := ev.(*cdpnetwork.EventResponseReceived); ok {
-				response := ev.Response
-				headers := make(map[string]string)
-				for name, value := range response.Headers {
-					if str, ok := value.(string); ok {
-						headers[name] = str
-					} else {
-						headers[name] = fmt.Sprintf("%v", value)
-					}
+				if !helpers.ShouldIncludeNetworkEvent(cfg, ev) {
+					return
 				}
+				ne := helpers.BuildNetworkEntryFromEvent(ev)
 				if verbose && !responseCaptured {
-					responseHeaders = headers
+					responseHeaders = ne.Headers
 					responseCaptured = true
 				}
 				if showNetwork {
-					network = append(network, NetworkEntry{
-						URL:       response.URL,
-						Method:    "GET",
-						Status:    int(response.Status),
-						Headers:   headers,
-						Timestamp: time.Now(),
-						Type:      string(response.MimeType),
-						Size:      int64(response.EncodedDataLength),
-					})
+					network = append(network, ne)
 				}
 			}
 		}

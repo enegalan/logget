@@ -12,4 +12,5 @@ type Config struct {
 	JSONOutput     bool
 	FilterPattern  string
 	ExcludePattern string
+	XHROnly        bool
 }
