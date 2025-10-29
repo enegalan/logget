@@ -28,7 +28,7 @@ Download the appropriate binary for your platform from the [releases page](https
 ### Build from Source
 
 ```bash
-git clone https://github.com/yourusername/logget.git
+git clone https://github.com/enegalan/logget.git
 cd logget
 go mod tidy
 go build -o logget .
