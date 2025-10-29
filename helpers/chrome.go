@@ -62,6 +62,11 @@ func ShouldIncludeNetworkEvent(cfg Config, ev *cdpnetwork.EventResponseReceived)
 			return false
 		}
 	}
+	if cfg.MediaOnly {
+		if ev.Type != cdpnetwork.ResourceTypeMedia {
+			return false
+		}
+	}
 	return true
 }
 
