@@ -52,6 +52,7 @@ var (
 	followMode      bool
 	filterPattern   string
 	excludePattern  string
+	statusPattern   string
 	refreshInterval int
 
 	skipSSLVerify bool
@@ -96,6 +97,7 @@ func main() {
 	rootCmd.Flags().BoolVarP(&followMode, "follow", "f", false, "Stream logs and network requests in real-time")
 	rootCmd.Flags().StringVar(&filterPattern, "filter", "", "Show only logs/requests matching this regex pattern")
 	rootCmd.Flags().StringVar(&excludePattern, "exclude", "", "Exclude logs/requests matching this regex pattern")
+	rootCmd.Flags().StringVar(&statusPattern, "status", "", "Only include requests whose HTTP status code matches this regex pattern")
 	rootCmd.Flags().IntVar(&refreshInterval, "refresh", 100, "Refresh interval in milliseconds for real-time streaming")
 	rootCmd.Flags().BoolVarP(&skipSSLVerify, "insecure", "k", false, "Skip SSL certificate verification (useful for self-signed certificates)")
 	rootCmd.Flags().BoolVar(&xhrOnly, "xhr", false, "Only include fetch/XHR requests")
@@ -143,6 +145,7 @@ func processURL(url string) {
 		JSONOutput:     jsonOutput,
 		FilterPattern:  filterPattern,
 		ExcludePattern: excludePattern,
+		StatusPattern:  statusPattern,
 		XHROnly:        xhrOnly,
 		DocumentOnly:   documentOnly,
 		CssOnly:        cssOnly,

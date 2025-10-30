@@ -13,6 +13,7 @@ type Config struct {
 	JSONOutput     bool
 	FilterPattern  string
 	ExcludePattern string
+	StatusPattern  string
 	XHROnly        bool
 	DocumentOnly   bool
 	CssOnly        bool

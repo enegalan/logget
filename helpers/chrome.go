@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -80,6 +81,16 @@ func ShouldIncludeNetworkEvent(cfg Config, ev *cdpnetwork.EventResponseReceived)
 	if cfg.WasmOnly {
 		if ev.Response == nil || strings.ToLower(string(ev.Response.MimeType)) != "application/wasm" {
 			return false
+		}
+	}
+	if cfg.StatusPattern != "" {
+		if ev.Response == nil {
+			return false
+		}
+		if r, err := regexp.Compile(cfg.StatusPattern); err == nil {
+			if !r.MatchString(fmt.Sprintf("%d", int(ev.Response.Status))) {
+				return false
+			}
 		}
 	}
 	return true

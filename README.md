@@ -161,6 +161,12 @@ logget --network --ws https://example.com
 
 # Only WebAssembly requests
 logget --network --wasm https://example.com
+
+# Only 2xx responses (regex)
+logget --network --status "^2..$" https://example.com
+
+# Only 200 or 204
+logget --network --status "^(200|204)$" https://example.com
 ```
 
 ### Options
@@ -181,6 +187,7 @@ logget --network --wasm https://example.com
 - `--follow`, `-f`: Stream logs and network requests in real-time
 - `--filter`: Show only logs/requests matching this regex pattern
 - `--exclude`: Exclude logs/requests matching this regex pattern
+- `--status`: Only include requests whose HTTP status code matches this regex
 - `--refresh`: Refresh interval in milliseconds for real-time streaming (default: 100)
 - `--insecure`, `-k`: Skip SSL certificate verification (useful for self-signed certificates)
 - `--xhr`: Only include fetch/XHR requests
