@@ -167,6 +167,12 @@ logget --network --status "^2..$" https://example.com
 
 # Only 200 or 204
 logget --network --status "^(200|204)$" https://example.com
+
+# Only requests to a specific domain
+logget --network --domain "^api\\.example\\.com$" https://example.com
+
+# Requests to subdomains of example.com
+logget --network --domain "(.*\\.)?example\\.com$" https://example.com
 ```
 
 ### Options
@@ -188,6 +194,7 @@ logget --network --status "^(200|204)$" https://example.com
 - `--filter`: Show only logs/requests matching this regex pattern
 - `--exclude`: Exclude logs/requests matching this regex pattern
 - `--status`: Only include requests whose HTTP status code matches this regex
+- `--domain`: Only include requests whose domain matches this regex
 - `--refresh`: Refresh interval in milliseconds for real-time streaming (default: 100)
 - `--insecure`, `-k`: Skip SSL certificate verification (useful for self-signed certificates)
 - `--xhr`: Only include fetch/XHR requests

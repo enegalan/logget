@@ -14,6 +14,7 @@ type Config struct {
 	FilterPattern  string
 	ExcludePattern string
 	StatusPattern  string
+	DomainPattern  string
 	XHROnly        bool
 	DocumentOnly   bool
 	CssOnly        bool

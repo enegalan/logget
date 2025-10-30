@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	neturl "net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -90,6 +91,19 @@ func ShouldIncludeNetworkEvent(cfg Config, ev *cdpnetwork.EventResponseReceived)
 		if r, err := regexp.Compile(cfg.StatusPattern); err == nil {
 			if !r.MatchString(fmt.Sprintf("%d", int(ev.Response.Status))) {
 				return false
+			}
+		}
+	}
+	if cfg.DomainPattern != "" {
+		if ev.Response == nil {
+			return false
+		}
+		if u, err := neturl.Parse(ev.Response.URL); err == nil {
+			host := u.Hostname()
+			if r, err := regexp.Compile(cfg.DomainPattern); err == nil {
+				if !r.MatchString(host) {
+					return false
+				}
 			}
 		}
 	}
