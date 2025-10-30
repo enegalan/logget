@@ -54,6 +54,7 @@ var (
 	excludePattern  string
 	statusPattern   string
 	domainPattern   string
+	mimePattern     string
 	refreshInterval int
 
 	skipSSLVerify bool
@@ -69,7 +70,6 @@ var (
 	mediaOnly     bool
 	manifestOnly  bool
 	websocketOnly bool
-	wasmOnly      bool
 )
 
 func main() {
@@ -100,6 +100,7 @@ func main() {
 	rootCmd.Flags().StringVar(&excludePattern, "exclude", "", "Exclude logs/requests matching this regex pattern")
 	rootCmd.Flags().StringVar(&statusPattern, "status", "", "Only include requests whose HTTP status code matches this regex pattern")
 	rootCmd.Flags().StringVar(&domainPattern, "domain", "", "Only include requests whose domain matches this regex pattern")
+	rootCmd.Flags().StringVar(&mimePattern, "mime", "", "Only include requests whose MIME type matches this regex pattern")
 	rootCmd.Flags().IntVar(&refreshInterval, "refresh", 100, "Refresh interval in milliseconds for real-time streaming")
 	rootCmd.Flags().BoolVarP(&skipSSLVerify, "insecure", "k", false, "Skip SSL certificate verification (useful for self-signed certificates)")
 	rootCmd.Flags().BoolVar(&xhrOnly, "xhr", false, "Only include fetch/XHR requests")
@@ -112,7 +113,6 @@ func main() {
 	rootCmd.Flags().BoolVar(&manifestOnly, "manifest", false, "Only include Manifest requests")
 	rootCmd.Flags().BoolVar(&websocketOnly, "ws", false, "Only include WebSocket requests")
 	rootCmd.Flags().BoolVar(&websocketOnly, "websocket", false, "Only include WebSocket requests")
-	rootCmd.Flags().BoolVar(&wasmOnly, "wasm", false, "Only include WebAssembly (application/wasm) requests")
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -149,6 +149,7 @@ func processURL(url string) {
 		ExcludePattern: excludePattern,
 		StatusPattern:  statusPattern,
 		DomainPattern:  domainPattern,
+		MimePattern:    mimePattern,
 		XHROnly:        xhrOnly,
 		DocumentOnly:   documentOnly,
 		CssOnly:        cssOnly,
@@ -158,7 +159,6 @@ func processURL(url string) {
 		MediaOnly:      mediaOnly,
 		ManifestOnly:   manifestOnly,
 		WebSocketOnly:  websocketOnly,
-		WasmOnly:       wasmOnly,
 	}
 	// Quick check: if no data collection flags are specified, show help immediately
 	if !showLogs && !showNetwork && !verbose && !jsonOutput && !followMode {

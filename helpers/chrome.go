@@ -79,9 +79,20 @@ func ShouldIncludeNetworkEvent(cfg Config, ev *cdpnetwork.EventResponseReceived)
 			return false
 		}
 	}
-	if cfg.WasmOnly {
-		if ev.Response == nil || strings.ToLower(string(ev.Response.MimeType)) != "application/wasm" {
+	if cfg.MimePattern != "" {
+		if ev.Response == nil {
 			return false
+		}
+		mimeCandidate := strings.ToLower(string(ev.Response.MimeType))
+		if ctRaw, ok := ev.Response.Headers["Content-Type"]; ok {
+			if s, ok := ctRaw.(string); ok && s != "" {
+				mimeCandidate = strings.ToLower(s)
+			}
+		}
+		if r, err := regexp.Compile(cfg.MimePattern); err == nil {
+			if !r.MatchString(mimeCandidate) {
+				return false
+			}
 		}
 	}
 	if cfg.StatusPattern != "" {

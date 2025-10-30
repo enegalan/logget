@@ -15,6 +15,7 @@ type Config struct {
 	ExcludePattern string
 	StatusPattern  string
 	DomainPattern  string
+	MimePattern    string
 	XHROnly        bool
 	DocumentOnly   bool
 	CssOnly        bool
@@ -24,5 +25,4 @@ type Config struct {
 	MediaOnly      bool
 	ManifestOnly   bool
 	WebSocketOnly  bool
-	WasmOnly       bool
 }
