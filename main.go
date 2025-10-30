@@ -70,6 +70,7 @@ var (
 	mediaOnly     bool
 	manifestOnly  bool
 	websocketOnly bool
+	noColor       bool
 )
 
 func main() {
@@ -103,6 +104,7 @@ func main() {
 	rootCmd.Flags().StringVar(&mimePattern, "mime", "", "Only include requests whose MIME type matches this regex pattern")
 	rootCmd.Flags().IntVar(&refreshInterval, "refresh", 100, "Refresh interval in milliseconds for real-time streaming")
 	rootCmd.Flags().BoolVarP(&skipSSLVerify, "insecure", "k", false, "Skip SSL certificate verification (useful for self-signed certificates)")
+	rootCmd.Flags().BoolVar(&noColor, "no-color", false, "Disable colored output")
 	rootCmd.Flags().BoolVar(&xhrOnly, "xhr", false, "Only include fetch/XHR requests")
 	rootCmd.Flags().BoolVar(&documentOnly, "document", false, "Only include Document requests")
 	rootCmd.Flags().BoolVar(&cssOnly, "css", false, "Only include CSS requests")
@@ -120,6 +122,8 @@ func main() {
 }
 
 func runLogget(cmd *cobra.Command, args []string) {
+	logger = helpers.NewLogger(verbose, !noColor)
+	formatter = helpers.NewOutputFormatter(!noColor)
 	if versionFlag {
 		logger.PrintHeader(version)
 		os.Exit(0)

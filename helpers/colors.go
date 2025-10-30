@@ -44,6 +44,7 @@ const (
 )
 
 type ColorTheme struct {
+	Enabled bool
 	// Log levels
 	Debug    string
 	Info     string
@@ -70,6 +71,7 @@ type ColorTheme struct {
 
 func DefaultTheme() *ColorTheme {
 	return &ColorTheme{
+		Enabled: true,
 		// Log levels
 		Debug:    Cyan,
 		Info:     Green,
@@ -97,6 +99,7 @@ func DefaultTheme() *ColorTheme {
 
 func DisabledTheme() *ColorTheme {
 	return &ColorTheme{
+		Enabled:  false,
 		Debug:    "",
 		Info:     "",
 		Warn:     "",
@@ -122,7 +125,7 @@ func DisabledTheme() *ColorTheme {
 }
 
 func (ct *ColorTheme) Colorize(color, text string) string {
-	if color == "" {
+	if !ct.Enabled || color == "" {
 		return text
 	}
 	return color + text + Reset
