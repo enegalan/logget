@@ -77,7 +77,6 @@ func main() {
 	var rootCmd = &cobra.Command{
 		Use:   "logget [flags] <url>",
 		Short: "Extract logs and network data from web pages",
-		Long:  ``,
 		Args:  cobra.ArbitraryArgs,
 		Run:   runLogget,
 	}
