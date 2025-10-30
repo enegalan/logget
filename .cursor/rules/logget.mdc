@@ -50,3 +50,4 @@ This command is not intended to retrieve the response bodies, as that deviates f
 - Do not introduce new external dependencies without explicit instruction.
 - Keep comments brief and only where they aid maintainability.
 - Use English for code, comments, commit messages, and documentation.
+- Use `\t` for indenting in `*.go` files and in `Makefile`
