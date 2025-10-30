@@ -1,0 +1,52 @@
+---
+alwaysApply: true
+---
+
+## Project: logget – Cursor Working Rules
+
+These rules guide AI-assisted edits within this repository to keep changes safe, consistent, and aligned with project standards.
+
+### Project philosophy
+
+`logget` is a CLI command that allows you to obtain network logs and requests using DevTools utilities. Its purpose is to **monitor, filter, and analyze** them.
+
+This command is not intended to retrieve the response bodies, as that deviates from `logget`'s` function. It's a tool designed for developers, enabling them to analyze logs without needing to open a web browser. This opens up possibilities for an AI agent to use the command and iterate over a problem without requiring user interaction.
+
+### Primary Language and Style
+- Use Go exclusively for source code changes.
+- Run `gofmt`-style formatting implicitly; do not introduce non-idiomatic styles.
+- Favor clear, descriptive names; avoid abbreviations in exported APIs.
+- Keep functions small, with early returns; avoid deep nesting.
+- Error handling: return errors; do not panic except in `main()` startup failures.
+- Logging: use helpers in `helpers/logger.go` and respect existing logging levels and formats.
+- Colors: use helper in `helpers/colors.go` and respect existing coloring structure.
+
+### Files, Structure, and Boundaries
+- Do not move or rename files unless explicitly requested.
+- Do not modify `LICENSE`, `VERSION`, or release artifacts under `releases/` and `build/`.
+- Respect the current module path in `go.mod`; do not change it.
+- Keep helpers under `helpers/`; avoid cross-cutting utilities outside this folder.
+
+### CLI Behavior
+- When adding flags, update `README.md` usage sections.
+- Ensure new output honors existing formatting options in `helpers/formatter.go` and `helpers/output.go`.
+
+### Performance and Safety
+- Prefer streaming/iterative processing over loading entire data into memory when feasible.
+- Avoid global mutable state; pass dependencies explicitly.
+- Do not add network calls or telemetry.
+
+### Documentation
+- Update `README.md` when user-facing behavior or flags change.
+- Add brief package-level or function doc comments for non-obvious logic.
+
+### Commit and PR Etiquette
+- Write concise, imperative commit messages (e.g., "Add filter for header matching").
+- Group related changes; avoid large, mixed edits.
+
+### Cursor-Specific Editing Rules
+- Preserve existing indentation style and width; do not reformat unrelated code.
+- Make minimal, surgical edits; do not rewrite files wholesale.
+- Do not introduce new external dependencies without explicit instruction.
+- Keep comments brief and only where they aid maintainability.
+- Use English for code, comments, commit messages, and documentation.
