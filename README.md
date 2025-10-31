@@ -157,7 +157,7 @@ logget --network --img https://example.com
 logget --network --script --css https://example.com
 
 # Only WebSocket traffic
-logget --network --ws https://example.com
+logget --network --socket https://example.com
 
 # Only JavaScript MIME types
 logget --network --mime "^application/(javascript|json)$" https://example.com
@@ -208,7 +208,7 @@ logget --network --domain "(.*\\.)?example\\.com$" https://example.com
 - `--img`: Only include Image requests
 - `--media`: Only include Media requests
 - `--manifest`: Only include Manifest requests
-- `--ws`, `--websocket`: Only include WebSocket requests
+- `--socket`: Only include WebSocket requests
 
 ### File Output and Directory Organization
 
