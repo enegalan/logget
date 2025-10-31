@@ -9,6 +9,7 @@ import (
 	helpers "logget/helpers"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"syscall"
@@ -35,6 +36,7 @@ var (
 	showLogs         bool
 	showNetwork      bool
 	jsonOutput       bool
+	csvOutput        bool
 	timeout          int
 	wait             int
 	userAgent        string
@@ -86,6 +88,7 @@ func main() {
 	rootCmd.Flags().BoolVarP(&showLogs, "logs", "L", false, "Show console logs")
 	rootCmd.Flags().BoolVarP(&showNetwork, "network", "N", false, "Show network requests")
 	rootCmd.Flags().BoolVarP(&jsonOutput, "json", "J", false, "Output in JSON format")
+	rootCmd.Flags().BoolVar(&csvOutput, "csv", false, "Output in CSV format")
 	rootCmd.Flags().IntVarP(&timeout, "timeout", "T", 60, "Timeout in seconds")
 	rootCmd.Flags().IntVarP(&wait, "wait", "W", 3, "Wait time in seconds after page load")
 	rootCmd.Flags().StringVarP(&userAgent, "user-agent", "A", "logget/1.0", "Set User-Agent header")
@@ -145,6 +148,7 @@ func processURL(url string) {
 		OutputFile:     outputFile,
 		OutputDir:      outputDir,
 		AppendMode:     appendMode,
+		FollowMode:     followMode,
 		SkipSSLVerify:  skipSSLVerify,
 		ShowNetwork:    showNetwork,
 		ShowLogs:       showLogs,
@@ -286,7 +290,36 @@ func processURL(url string) {
 	}
 	// Handle follow mode
 	if followMode {
-		logger.Progress("Streaming logs from %s (Press Ctrl+C to stop)", url)
+		if cfg.OutputFile != "" {
+			var filePath string
+			if cfg.OutputDir != "" {
+				if err := os.MkdirAll(cfg.OutputDir, 0755); err != nil {
+					logger.Fatal("Failed to create output directory: %v", err)
+				}
+				filePath = filepath.Join(cfg.OutputDir, cfg.OutputFile)
+			} else {
+				filePath = cfg.OutputFile
+			}
+			var testFile *os.File
+			var testErr error
+			if cfg.AppendMode {
+				testFile, testErr = os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+			} else {
+				testFile, testErr = os.Create(filePath)
+			}
+			if testErr != nil {
+				logger.Fatal("Failed to create/open output file '%s': %v", filePath, testErr)
+			}
+			testFile.Close()
+			if !cfg.AppendMode {
+				if err := os.Truncate(filePath, 0); err != nil {
+					logger.Warn("Failed to truncate output file: %v", err)
+				}
+			}
+			logger.Progress("Streaming logs from %s (Press Ctrl+C to stop) -> %s", url, filePath)
+		} else {
+			logger.Progress("Streaming logs from %s (Press Ctrl+C to stop)", url)
+		}
 		var filterRegex, excludeRegex *regexp.Regexp
 		if filterPattern != "" {
 			if r, err := regexp.Compile(filterPattern); err == nil {
@@ -298,16 +331,50 @@ func processURL(url string) {
 				excludeRegex = r
 			}
 		}
+		headerWrittenLogs := false
+		headerWrittenNet := false
+		outputErrorCount := 0
+		const maxOutputErrors = 5
 		onLog := func(le helpers.LogEntry) {
 			if !helpers.ShouldShowLine(le.Message, filterRegex, excludeRegex) {
 				return
 			}
 			if jsonOutput {
 				b, _ := json.Marshal(le)
-				_ = helpers.WriteOutput(cfg, string(b)+"\n")
+				if err := helpers.WriteOutput(cfg, string(b)+"\n"); err != nil {
+					outputErrorCount++
+					if outputErrorCount <= maxOutputErrors {
+						logger.Warn("Failed to write to output file: %v", err)
+					}
+					if outputErrorCount == maxOutputErrors {
+						logger.Warn("Too many output errors, suppressing further warnings...")
+					}
+				}
 				return
 			}
-			formatter.FormatAndOutputLog(le, cfg)
+			if csvOutput {
+				if err := formatter.FormatAndOutputLogCSVRow(le, cfg, !headerWrittenLogs); err != nil {
+					outputErrorCount++
+					if outputErrorCount <= maxOutputErrors {
+						logger.Warn("Failed to write CSV log row: %v", err)
+					}
+					if outputErrorCount == maxOutputErrors {
+						logger.Warn("Too many output errors, suppressing further warnings...")
+					}
+				} else {
+					headerWrittenLogs = true
+				}
+				return
+			}
+			if err := formatter.FormatAndOutputLog(le, cfg); err != nil {
+				outputErrorCount++
+				if outputErrorCount <= maxOutputErrors {
+					logger.Warn("Failed to write log entry: %v", err)
+				}
+				if outputErrorCount == maxOutputErrors {
+					logger.Warn("Too many output errors, suppressing further warnings...")
+				}
+			}
 		}
 		onNet := func(ne helpers.NetworkEntry) {
 			if !helpers.ShouldShowLine(ne.URL, filterRegex, excludeRegex) {
@@ -315,10 +382,40 @@ func processURL(url string) {
 			}
 			if jsonOutput {
 				b, _ := json.Marshal(ne)
-				_ = helpers.WriteOutput(cfg, string(b)+"\n")
+				if err := helpers.WriteOutput(cfg, string(b)+"\n"); err != nil {
+					outputErrorCount++
+					if outputErrorCount <= maxOutputErrors {
+						logger.Warn("Failed to write to output file: %v", err)
+					}
+					if outputErrorCount == maxOutputErrors {
+						logger.Warn("Too many output errors, suppressing further warnings...")
+					}
+				}
 				return
 			}
-			formatter.FormatAndOutputNetwork(ne, cfg)
+			if csvOutput {
+				if err := formatter.FormatAndOutputNetworkCSVRow(ne, cfg, !headerWrittenNet); err != nil {
+					outputErrorCount++
+					if outputErrorCount <= maxOutputErrors {
+						logger.Warn("Failed to write CSV network row: %v", err)
+					}
+					if outputErrorCount == maxOutputErrors {
+						logger.Warn("Too many output errors, suppressing further warnings...")
+					}
+				} else {
+					headerWrittenNet = true
+				}
+				return
+			}
+			if err := formatter.FormatAndOutputNetwork(ne, cfg); err != nil {
+				outputErrorCount++
+				if outputErrorCount <= maxOutputErrors {
+					logger.Warn("Failed to write network entry: %v", err)
+				}
+				if outputErrorCount == maxOutputErrors {
+					logger.Warn("Too many output errors, suppressing further warnings...")
+				}
+			}
 		}
 		sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
@@ -366,7 +463,7 @@ func processURL(url string) {
 		}
 	} else {
 		var outputContent strings.Builder
-		if verbose {
+		if verbose && !jsonOutput && !csvOutput {
 			outputContent.WriteString(formatter.FormatHTTPResponse(responseProtocol, statusCode, duration))
 			outputContent.WriteString(formatter.FormatRequestHeaders(helpers.GenerateDynamicHeaders(cfg, url)))
 			outputContent.WriteString(formatter.FormatResponseHeaders(responseHeaders))

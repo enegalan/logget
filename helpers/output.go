@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 )
 
+var fileWriteState = make(map[string]bool)
+
 func WriteOutput(cfg Config, content string) error {
 	if cfg.OutputFile != "" {
 		var filePath string
@@ -19,10 +21,22 @@ func WriteOutput(cfg Config, content string) error {
 		}
 		var file *os.File
 		var err error
-		if cfg.AppendMode {
+		if cfg.FollowMode {
+			firstWrite := !fileWriteState[filePath]
+			if firstWrite && !cfg.AppendMode {
+				file, err = os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+				fileWriteState[filePath] = true
+			} else {
+				file, err = os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+			}
+		} else if cfg.AppendMode {
 			file, err = os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 		} else {
-			file, err = os.Create(filePath)
+			if _, err := os.Stat(filePath); err == nil {
+				file, err = os.OpenFile(filePath, os.O_WRONLY|os.O_TRUNC, 0644)
+			} else {
+				file, err = os.Create(filePath)
+			}
 		}
 		if err != nil {
 			return fmt.Errorf("failed to open output file: %v", err)

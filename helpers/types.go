@@ -7,6 +7,7 @@ type Config struct {
 	OutputFile     string
 	OutputDir      string
 	AppendMode     bool
+	FollowMode     bool
 	SkipSSLVerify  bool
 	ShowNetwork    bool
 	ShowLogs       bool

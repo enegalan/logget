@@ -180,6 +180,7 @@ logget --network --domain "(.*\\.)?example\\.com$" https://example.com
 - `--logs`, `-L`: Capture and display console logs
 - `--network`, `-N`: Capture and display network requests
 - `--json`, `-J`: Output results in JSON format
+- `--csv`: Output results in CSV format
 - `--no-color`: Disable colored output
 - `--output`, `-o`: Write to file instead of stdout
 - `--append`, `-a`: Append to file instead of overwriting

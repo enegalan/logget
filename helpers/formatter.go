@@ -1,6 +1,8 @@
 package helpers
 
 import (
+	"bytes"
+	"encoding/csv"
 	"fmt"
 	"strings"
 	"time"
@@ -154,7 +156,7 @@ func (f *OutputFormatter) Colorize(color, text string) string {
 	return f.theme.Colorize(color, text)
 }
 
-func (f *OutputFormatter) FormatAndOutputLog(le LogEntry, cfg Config) {
+func (f *OutputFormatter) FormatAndOutputLog(le LogEntry, cfg Config) error {
 	timestamp := le.Time.Format("15:04:05")
 	level := strings.ToUpper(le.Level)
 	message := le.Message
@@ -188,10 +190,10 @@ func (f *OutputFormatter) FormatAndOutputLog(le LogEntry, cfg Config) {
 		formattedSymbol,
 		formattedLevel,
 		message)
-	_ = WriteOutput(cfg, line)
+	return WriteOutput(cfg, line)
 }
 
-func (f *OutputFormatter) FormatAndOutputNetwork(ne NetworkEntry, cfg Config) {
+func (f *OutputFormatter) FormatAndOutputNetwork(ne NetworkEntry, cfg Config) error {
 	timestamp := ne.Timestamp.Format("15:04:05")
 	method := ne.Method
 	url := ne.URL
@@ -225,5 +227,67 @@ func (f *OutputFormatter) FormatAndOutputNetwork(ne NetworkEntry, cfg Config) {
 		formattedMethod,
 		url,
 		formattedStatus)
-	_ = WriteOutput(cfg, line)
+	return WriteOutput(cfg, line)
+}
+
+func (f *OutputFormatter) FormatLogsCSV(logs []LogEntry, includeHeader bool) string {
+	if len(logs) == 0 {
+		return ""
+	}
+	var buf bytes.Buffer
+	w := csv.NewWriter(&buf)
+	if includeHeader {
+		_ = w.Write([]string{"timestamp", "level", "source", "message"})
+	}
+	for _, le := range logs {
+		_ = w.Write([]string{le.Time.Format(time.RFC3339), strings.ToUpper(le.Level), le.Source, le.Message})
+	}
+	w.Flush()
+	return buf.String()
+}
+
+func (f *OutputFormatter) FormatNetworkCSV(entries []NetworkEntry, includeHeader bool) string {
+	if len(entries) == 0 {
+		return ""
+	}
+	var buf bytes.Buffer
+	w := csv.NewWriter(&buf)
+	if includeHeader {
+		_ = w.Write([]string{"timestamp", "method", "url", "status", "resourceType", "mimeType", "size"})
+	}
+	for _, ne := range entries {
+		_ = w.Write([]string{ne.Timestamp.Format(time.RFC3339), ne.Method, ne.URL, fmt.Sprintf("%d", ne.Status), ne.ResourceType, ne.Type, fmt.Sprintf("%d", ne.Size)})
+	}
+	w.Flush()
+	return buf.String()
+}
+
+func (f *OutputFormatter) FormatAndOutputLogCSVRow(le LogEntry, cfg Config, includeHeader bool) error {
+	var buf bytes.Buffer
+	w := csv.NewWriter(&buf)
+	if includeHeader {
+		if err := w.Write([]string{"timestamp", "level", "source", "message"}); err != nil {
+			return fmt.Errorf("failed to write CSV header: %v", err)
+		}
+	}
+	if err := w.Write([]string{le.Time.Format(time.RFC3339), strings.ToUpper(le.Level), le.Source, le.Message}); err != nil {
+		return fmt.Errorf("failed to write CSV row: %v", err)
+	}
+	w.Flush()
+	return WriteOutput(cfg, buf.String())
+}
+
+func (f *OutputFormatter) FormatAndOutputNetworkCSVRow(ne NetworkEntry, cfg Config, includeHeader bool) error {
+	var buf bytes.Buffer
+	w := csv.NewWriter(&buf)
+	if includeHeader {
+		if err := w.Write([]string{"timestamp", "method", "url", "status", "resourceType", "mimeType", "size"}); err != nil {
+			return fmt.Errorf("failed to write CSV header: %v", err)
+		}
+	}
+	if err := w.Write([]string{ne.Timestamp.Format(time.RFC3339), ne.Method, ne.URL, fmt.Sprintf("%d", ne.Status), ne.ResourceType, ne.Type, fmt.Sprintf("%d", ne.Size)}); err != nil {
+		return fmt.Errorf("failed to write CSV row: %v", err)
+	}
+	w.Flush()
+	return WriteOutput(cfg, buf.String())
 }
