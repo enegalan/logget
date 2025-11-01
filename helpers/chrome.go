@@ -32,6 +32,8 @@ type NetworkEntry struct {
 	Type         string            `json:"type"`
 	Size         int64             `json:"size"`
 	ResourceType string            `json:"resourceType"`
+	Error        string            `json:"error,omitempty"`
+	ErrorType    string            `json:"errorType,omitempty"`
 }
 
 func ShouldIncludeNetworkEvent(cfg Config, ev *cdpnetwork.EventResponseReceived) bool {
@@ -148,6 +150,79 @@ func BuildNetworkEntryFromEvent(ev *cdpnetwork.EventResponseReceived, requestMet
 	}
 }
 
+func CategorizeError(errorText string) string {
+	errorTextLower := strings.ToLower(errorText)
+	if strings.Contains(errorTextLower, "timeout") || strings.Contains(errorText, "ERR_TIMED_OUT") || strings.Contains(errorText, "ERR_NET_TIMED_OUT") {
+		return "timeout"
+	}
+	if strings.Contains(errorTextLower, "dns") || strings.Contains(errorText, "ERR_NAME_NOT_RESOLVED") || strings.Contains(errorText, "ERR_NAME_RESOLUTION_FAILED") || strings.Contains(errorText, "ERR_DNS_") {
+		return "dns"
+	}
+	if strings.Contains(errorTextLower, "cors") || strings.Contains(errorTextLower, "cross-origin") || strings.Contains(errorText, "ERR_BLOCKED_BY_CLIENT") || (strings.Contains(errorTextLower, "blocked") && strings.Contains(errorTextLower, "origin")) {
+		return "cors"
+	}
+	if strings.Contains(errorText, "ERR_CONNECTION_REFUSED") {
+		return "connection_refused"
+	}
+	if strings.Contains(errorText, "ERR_CONNECTION_RESET") {
+		return "connection_reset"
+	}
+	if strings.Contains(errorText, "ERR_CONNECTION_CLOSED") {
+		return "connection_closed"
+	}
+	if strings.Contains(errorText, "ERR_NETWORK_CHANGED") {
+		return "network_changed"
+	}
+	if strings.Contains(errorText, "ERR_SSL_") {
+		return "ssl"
+	}
+	if strings.Contains(errorText, "ERR_CERT_") {
+		return "certificate"
+	}
+	return "unknown"
+}
+
+func BuildNetworkEntryFromErrorEvent(ev *cdpnetwork.EventLoadingFailed, requestMethod string, requestURL string) NetworkEntry {
+	method := requestMethod
+	if method == "" {
+		method = "GET"
+	}
+	errorText := ev.ErrorText
+	errorType := CategorizeError(errorText)
+	return NetworkEntry{
+		URL:          requestURL,
+		Method:       method,
+		Status:       0,
+		Headers:      make(map[string]string),
+		Timestamp:    time.Now(),
+		Type:         "",
+		Size:         0,
+		ResourceType: ev.Type.String(),
+		Error:        errorText,
+		ErrorType:    errorType,
+	}
+}
+
+func HandleLoadingFailedEvent(ev *cdpnetwork.EventLoadingFailed, requestMethods *sync.Map, requestURLs *sync.Map) *NetworkEntry {
+	var method string
+	var requestURL string
+	if methodVal, ok := requestMethods.Load(ev.RequestID.String()); ok {
+		if methodStr, ok := methodVal.(string); ok {
+			method = methodStr
+		}
+	}
+	if urlVal, ok := requestURLs.Load(ev.RequestID.String()); ok {
+		if urlStr, ok := urlVal.(string); ok {
+			requestURL = urlStr
+		}
+	}
+	if requestURL == "" {
+		return nil
+	}
+	ne := BuildNetworkEntryFromErrorEvent(ev, method, requestURL)
+	return &ne
+}
+
 func StreamLogsRealTime(cfg Config, ctx context.Context, url string, onLog func(LogEntry), onNet func(NetworkEntry)) error {
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.Flag("headless", true),
@@ -188,11 +263,13 @@ func StreamLogsRealTime(cfg Config, ctx context.Context, url string, onLog func(
 		}
 	}
 	requestMethods := sync.Map{}
+	requestURLs := sync.Map{}
 	chromedp.ListenTarget(ctx, func(ev interface{}) {
 		if cfg.ShowNetwork {
 			if ev, ok := ev.(*cdpnetwork.EventRequestWillBeSent); ok {
 				if ev.Request != nil {
 					requestMethods.Store(ev.RequestID.String(), ev.Request.Method)
+					requestURLs.Store(ev.RequestID.String(), ev.Request.URL)
 				}
 			}
 		}
@@ -237,6 +314,13 @@ func StreamLogsRealTime(cfg Config, ctx context.Context, url string, onLog func(
 					}
 				}
 				onNet(BuildNetworkEntryFromEvent(ev, method))
+			}
+			// Network loading failures
+			if ev, ok := ev.(*cdpnetwork.EventLoadingFailed); ok {
+				ne := HandleLoadingFailedEvent(ev, &requestMethods, &requestURLs)
+				if ne != nil {
+					onNet(*ne)
+				}
 			}
 		}
 	})

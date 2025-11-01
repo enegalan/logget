@@ -328,6 +328,13 @@ func processURL(url string) {
 					network = append(network, ne)
 				}
 			}
+			// Network loading failures
+			if ev, ok := ev.(*cdpnetwork.EventLoadingFailed); ok {
+				ne := helpers.HandleLoadingFailedEvent(ev, &requestMethods, &requestURLs)
+				if ne != nil && showNetwork {
+					network = append(network, *ne)
+				}
+			}
 		}
 	})
 	if len(headers) > 0 || userAgent.Get() != "" {

@@ -89,9 +89,23 @@ func (f *OutputFormatter) FormatNetworkRequests(network []NetworkEntry) string {
 	for _, net := range network {
 		formattedMethod := f.theme.Bold(net.Method)
 		formattedURL := f.theme.Colorize(Cyan, net.URL)
-		statusColor := f.theme.GetStatusColor(net.Status)
-		formattedStatus := f.theme.Colorize(statusColor, fmt.Sprintf("%d", net.Status))
-		sb.WriteString(fmt.Sprintf("%s %s -> %s\n", formattedMethod, formattedURL, formattedStatus))
+		if net.Error != "" {
+			errorColor := Red
+			switch net.ErrorType {
+			case "timeout":
+				errorColor = Red
+			case "cors":
+				errorColor = Yellow
+			case "dns":
+				errorColor = Magenta
+			}
+			formattedError := f.theme.Colorize(errorColor, fmt.Sprintf("ERROR: %s (%s)", net.Error, net.ErrorType))
+			sb.WriteString(fmt.Sprintf("%s %s -> %s\n", formattedMethod, formattedURL, formattedError))
+		} else {
+			statusColor := f.theme.GetStatusColor(net.Status)
+			formattedStatus := f.theme.Colorize(statusColor, fmt.Sprintf("%d", net.Status))
+			sb.WriteString(fmt.Sprintf("%s %s -> %s\n", formattedMethod, formattedURL, formattedStatus))
+		}
 		if len(net.Headers) > 0 {
 			for k, v := range net.Headers {
 				formattedKey := f.theme.Colorize(Yellow, k)
@@ -214,19 +228,40 @@ func (f *OutputFormatter) FormatAndOutputNetwork(ne NetworkEntry, cfg Config) er
 	default:
 		methodSymbol = "🌐"
 	}
-	statusColor := f.GetStatusColor(status)
 	formattedTimestamp := f.FormatTimestamp(timestamp)
 	formattedPrefix := f.FormatNetworkPrefix()
 	formattedSymbol := f.Colorize(methodColor, methodSymbol)
 	formattedMethod := f.Colorize(methodColor, method)
-	formattedStatus := f.Colorize(statusColor, fmt.Sprintf("%d", status))
-	line := fmt.Sprintf("[%s] %s %s %s %s %s\n",
-		formattedTimestamp,
-		formattedPrefix,
-		formattedSymbol,
-		formattedMethod,
-		url,
-		formattedStatus)
+	var line string
+	if ne.Error != "" {
+		errorColor := Red
+		switch ne.ErrorType {
+		case "timeout":
+			errorColor = Red
+		case "cors":
+			errorColor = Yellow
+		case "dns":
+			errorColor = Magenta
+		}
+		formattedError := f.Colorize(errorColor, fmt.Sprintf("ERROR: %s (%s)", ne.Error, ne.ErrorType))
+		line = fmt.Sprintf("[%s] %s %s %s %s %s\n",
+			formattedTimestamp,
+			formattedPrefix,
+			formattedSymbol,
+			formattedMethod,
+			url,
+			formattedError)
+	} else {
+		statusColor := f.GetStatusColor(status)
+		formattedStatus := f.Colorize(statusColor, fmt.Sprintf("%d", status))
+		line = fmt.Sprintf("[%s] %s %s %s %s %s\n",
+			formattedTimestamp,
+			formattedPrefix,
+			formattedSymbol,
+			formattedMethod,
+			url,
+			formattedStatus)
+	}
 	return WriteOutput(cfg, line)
 }
 
@@ -253,10 +288,10 @@ func (f *OutputFormatter) FormatNetworkCSV(entries []NetworkEntry, includeHeader
 	var buf bytes.Buffer
 	w := csv.NewWriter(&buf)
 	if includeHeader {
-		_ = w.Write([]string{"timestamp", "method", "url", "status", "resourceType", "mimeType", "size"})
+		_ = w.Write([]string{"timestamp", "method", "url", "status", "resourceType", "mimeType", "size", "error", "errorType"})
 	}
 	for _, ne := range entries {
-		_ = w.Write([]string{ne.Timestamp.Format(time.RFC3339), ne.Method, ne.URL, fmt.Sprintf("%d", ne.Status), ne.ResourceType, ne.Type, fmt.Sprintf("%d", ne.Size)})
+		_ = w.Write([]string{ne.Timestamp.Format(time.RFC3339), ne.Method, ne.URL, fmt.Sprintf("%d", ne.Status), ne.ResourceType, ne.Type, fmt.Sprintf("%d", ne.Size), ne.Error, ne.ErrorType})
 	}
 	w.Flush()
 	return buf.String()
@@ -281,11 +316,11 @@ func (f *OutputFormatter) FormatAndOutputNetworkCSVRow(ne NetworkEntry, cfg Conf
 	var buf bytes.Buffer
 	w := csv.NewWriter(&buf)
 	if includeHeader {
-		if err := w.Write([]string{"timestamp", "method", "url", "status", "resourceType", "mimeType", "size"}); err != nil {
+		if err := w.Write([]string{"timestamp", "method", "url", "status", "resourceType", "mimeType", "size", "error", "errorType"}); err != nil {
 			return fmt.Errorf("failed to write CSV header: %v", err)
 		}
 	}
-	if err := w.Write([]string{ne.Timestamp.Format(time.RFC3339), ne.Method, ne.URL, fmt.Sprintf("%d", ne.Status), ne.ResourceType, ne.Type, fmt.Sprintf("%d", ne.Size)}); err != nil {
+	if err := w.Write([]string{ne.Timestamp.Format(time.RFC3339), ne.Method, ne.URL, fmt.Sprintf("%d", ne.Status), ne.ResourceType, ne.Type, fmt.Sprintf("%d", ne.Size), ne.Error, ne.ErrorType}); err != nil {
 		return fmt.Errorf("failed to write CSV row: %v", err)
 	}
 	w.Flush()
