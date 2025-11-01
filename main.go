@@ -41,7 +41,7 @@ var (
 	timeout          int
 	wait             int
 	userAgent        string
-	headers          []string
+	headers          flags.HeaderArray
 	cookies          flags.CookieArray
 	versionFlag      bool
 	verbose          bool
@@ -93,7 +93,7 @@ func main() {
 	rootCmd.Flags().IntVarP(&timeout, "timeout", "T", 60, "Timeout in seconds")
 	rootCmd.Flags().IntVarP(&wait, "wait", "W", 3, "Wait time in seconds after page load")
 	rootCmd.Flags().StringVarP(&userAgent, "user-agent", "A", "logget/1.0", "Set User-Agent header")
-	rootCmd.Flags().StringArrayVarP(&headers, "header", "H", []string{}, "Add custom headers (format: 'Key: Value')")
+	rootCmd.Flags().VarP(&headers, "header", "H", "Add custom headers (format: 'Key: Value') or filename containing headers")
 	rootCmd.Flags().VarP(&cookies, "cookie", "C", "Add cookies (format: 'name=value' or 'name=value; domain=example.com') or filename containing cookies")
 	rootCmd.Flags().StringVarP(&outputFile, "output", "o", "", "Write to file instead of stdout")
 	rootCmd.Flags().StringVar(&outputDir, "output-dir", "", "Directory to save files in")
@@ -143,7 +143,7 @@ func runLogget(cmd *cobra.Command, args []string) {
 func processURL(url string) {
 	cfg := helpers.Config{
 		UserAgent:      userAgent,
-		Headers:        headers,
+		Headers:        []string(headers),
 		Cookies:        []string(cookies),
 		OutputFile:     outputFile,
 		OutputDir:      outputDir,
