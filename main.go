@@ -39,7 +39,7 @@ var (
 	csvOutput        bool
 	timeout          int
 	wait             int
-	userAgent        string
+	userAgent        flags.UserAgent = "logget/1.0"
 	headers          flags.HeaderArray
 	cookies          flags.CookieArray
 	versionFlag      bool
@@ -90,7 +90,7 @@ func main() {
 	rootCmd.Flags().BoolVar(&csvOutput, "csv", false, "Output in CSV format")
 	rootCmd.Flags().IntVarP(&timeout, "timeout", "T", 60, "Timeout in seconds")
 	rootCmd.Flags().IntVarP(&wait, "wait", "W", 3, "Wait time in seconds after page load")
-	rootCmd.Flags().StringVarP(&userAgent, "user-agent", "A", "logget/1.0", "Set User-Agent header")
+	rootCmd.Flags().VarP(&userAgent, "user-agent", "A", "Set User-Agent header")
 	rootCmd.Flags().VarP(&headers, "header", "H", "Add custom headers (format: 'Key: Value') or filename containing headers")
 	rootCmd.Flags().VarP(&cookies, "cookie", "C", "Add cookies (format: 'name=value' or 'name=value; domain=example.com') or filename containing cookies")
 	rootCmd.Flags().VarP(&outputFile, "output", "o", "Write to file instead of stdout")
@@ -139,7 +139,7 @@ func runLogget(cmd *cobra.Command, args []string) {
 
 func processURL(url string) {
 	cfg := helpers.Config{
-		UserAgent:      userAgent,
+		UserAgent:      userAgent.Get(),
 		Headers:        []string(headers),
 		Cookies:        []string(cookies),
 		OutputFile:     outputFile.Get(),
