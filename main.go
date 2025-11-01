@@ -64,6 +64,7 @@ var (
 	skipSSLVerify        bool
 	noRotateFingerprints bool
 	fingerprintInterval  int
+	harOutput            bool
 
 	logger        *helpers.Logger
 	formatter     *helpers.OutputFormatter
@@ -128,6 +129,7 @@ func main() {
 	rootCmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress progress messages, only show data")
 	rootCmd.Flags().BoolVar(&noRotateFingerprints, "no-rotate-fingerprints", false, "Disable fingerprint rotation (default: enabled)")
 	rootCmd.Flags().IntVar(&fingerprintInterval, "fingerprint-interval", 5000, "Interval in milliseconds for fingerprint rotation")
+	rootCmd.Flags().BoolVar(&harOutput, "har", false, "Output in HAR (HTTP Archive) format")
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -183,9 +185,10 @@ func processURL(url string) {
 		MaxSize:             maxSize.Get(),
 		RotateFingerprints:  finalRotateFingerprints,
 		FingerprintInterval: fingerprintInterval,
+		HAROutput:           harOutput,
 	}
 	// Quick check: if no data collection flags are specified, show help immediately
-	if !showLogs && !showNetwork && !verbose && !jsonOutput && !followMode {
+	if !showLogs && !showNetwork && !verbose && !jsonOutput && !harOutput && !followMode {
 		logger.PrintUsage()
 		os.Exit(0)
 	}
@@ -253,6 +256,8 @@ func processURL(url string) {
 	requestMethods := sync.Map{}
 	requestHeadersMap := sync.Map{}
 	requestURLs := sync.Map{}
+	requestStartTimes := sync.Map{}
+	networkEntriesMap := sync.Map{}
 	chromedp.ListenTarget(ctx, func(ev interface{}) {
 		if showNetwork || verbose {
 			if ev, ok := ev.(*cdpnetwork.EventRequestWillBeSent); ok {
@@ -268,6 +273,7 @@ func processURL(url string) {
 						}
 					}
 					requestHeadersMap.Store(ev.RequestID.String(), headers)
+					requestStartTimes.Store(ev.RequestID.String(), float64(time.Since(startTime).Nanoseconds())/1e6)
 					if verbose && !requestCaptured && ev.Request.URL == url {
 						requestHeaders = headers
 						requestCaptured = true
@@ -336,13 +342,45 @@ func processURL(url string) {
 						method = methodStr
 					}
 				}
-				ne := helpers.BuildNetworkEntryFromEvent(ev, method)
+				var requestTiming *cdpnetwork.ResourceTiming
+				var requestStartTime, responseTime float64
+				if ev.Response != nil && ev.Response.Timing != nil {
+					requestTiming = ev.Response.Timing
+				}
+				if timeVal, ok := requestStartTimes.Load(ev.RequestID.String()); ok {
+					if timeFloat, ok := timeVal.(float64); ok {
+						requestStartTime = timeFloat
+					}
+				}
+				responseTime = float64(time.Since(startTime).Nanoseconds()) / 1e6
+				ne := helpers.BuildNetworkEntryFromEvent(ev, method, requestTiming, responseTime, requestStartTime)
+				if ne.ResponseStartTime > 0 {
+					helpers.StoreResponseStartTime(ev.RequestID.String(), responseTime)
+				}
 				if verbose && !responseCaptured {
 					responseHeaders = ne.Headers
 					responseCaptured = true
 				}
 				if showNetwork {
 					network = append(network, ne)
+					networkEntriesMap.Store(ev.RequestID.String(), &network[len(network)-1])
+				}
+			}
+			if ev, ok := ev.(*cdpnetwork.EventLoadingFinished); ok {
+				if entryVal, ok := networkEntriesMap.Load(ev.RequestID.String()); ok {
+					if entry, ok := entryVal.(*helpers.NetworkEntry); ok {
+						loadingFinishedTime := float64(time.Since(startTime).Nanoseconds()) / 1e6
+						if responseStartTime, ok := helpers.GetResponseStartTime(ev.RequestID.String()); ok {
+							entry.ContentDownloadTime = loadingFinishedTime - responseStartTime
+							entry.ContentDownloadTimeFormatted = helpers.FormatTiming(entry.ContentDownloadTime)
+							if entry.Duration > 0 && entry.ContentDownloadTime > 0 {
+								entry.Duration = entry.Duration + entry.ContentDownloadTime
+								entry.DurationFormatted = helpers.FormatTiming(entry.Duration)
+							}
+							entry.Total = entry.Total + entry.ContentDownloadTime
+							entry.TotalFormatted = helpers.FormatTiming(entry.Total)
+						}
+					}
 				}
 			}
 			// Network loading failures
@@ -531,7 +569,18 @@ func processURL(url string) {
 		Network:  network,
 		Duration: duration,
 	}
-	if jsonOutput {
+	if cfg.HAROutput {
+		harData, err := helpers.ConvertNetworkEntriesToHAR(network, url, startTime)
+		if err != nil {
+			logger.Fatal("Failed to generate HAR: %v", err)
+		}
+		if err = helpers.WriteOutput(cfg, string(harData)+"\n"); err != nil {
+			logger.Fatal("Failed to write HAR output: %v", err)
+		}
+		if cfg.OutputFile != "" {
+			helpers.LogOutputFileSuccess(cfg, "HAR output", logger)
+		}
+	} else if jsonOutput {
 		jsonData, err := json.MarshalIndent(output, "", "  ")
 		if err != nil {
 			logger.Fatal("Failed to marshal JSON: %v", err)
@@ -542,7 +591,7 @@ func processURL(url string) {
 		if cfg.OutputFile != "" {
 			helpers.LogOutputFileSuccess(cfg, "JSON output", logger)
 		}
-	} else {
+	} else if !cfg.HAROutput {
 		var outputContent strings.Builder
 		if verbose && !jsonOutput && !csvOutput {
 			outputContent.WriteString(formatter.FormatHTTPResponse(responseProtocol, statusCode, duration))

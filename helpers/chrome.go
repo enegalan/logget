@@ -24,16 +24,42 @@ type LogEntry struct {
 }
 
 type NetworkEntry struct {
-	URL          string            `json:"url"`
-	Method       string            `json:"method"`
-	Status       int               `json:"status"`
-	Headers      map[string]string `json:"headers"`
-	Timestamp    time.Time         `json:"timestamp"`
-	Type         string            `json:"type"`
-	Size         int64             `json:"size"`
-	ResourceType string            `json:"resourceType"`
-	Error        string            `json:"error,omitempty"`
-	ErrorType    string            `json:"errorType,omitempty"`
+	URL                          string            `json:"url"`
+	Method                       string            `json:"method"`
+	Status                       int               `json:"status"`
+	Headers                      map[string]string `json:"headers"`
+	Timestamp                    time.Time         `json:"timestamp"`
+	Type                         string            `json:"type"`
+	Size                         int64             `json:"size"`
+	ResourceType                 string            `json:"resourceType"`
+	Error                        string            `json:"error,omitempty"`
+	ErrorType                    string            `json:"errorType,omitempty"`
+	Duration                     float64           `json:"duration,omitempty"`
+	DurationFormatted            string            `json:"durationFormatted,omitempty"` // Formatted representation (ms or s)
+	TimeToFirstByte              float64           `json:"timeToFirstByte,omitempty"`
+	TimeToFirstByteFormatted     string            `json:"timeToFirstByteFormatted,omitempty"`
+	ConnectTime                  float64           `json:"connectTime,omitempty"`
+	ConnectTimeFormatted         string            `json:"connectTimeFormatted,omitempty"`
+	DNSLookupTime                float64           `json:"dnsLookupTime,omitempty"`
+	DNSLookupTimeFormatted       string            `json:"dnsLookupTimeFormatted,omitempty"`
+	SSLTime                      float64           `json:"sslTime,omitempty"`
+	SSLTimeFormatted             string            `json:"sslTimeFormatted,omitempty"`
+	ReceiveTime                  float64           `json:"receiveTime,omitempty"`
+	ReceiveTimeFormatted         string            `json:"receiveTimeFormatted,omitempty"`
+	ContentDownloadTime          float64           `json:"contentDownloadTime,omitempty"` // Full content download time (like Chrome DevTools)
+	ContentDownloadTimeFormatted string            `json:"contentDownloadTimeFormatted,omitempty"`
+	SendTime                     float64           `json:"sendTime,omitempty"`
+	SendTimeFormatted            string            `json:"sendTimeFormatted,omitempty"`
+	WaitTime                     float64           `json:"waitTime,omitempty"`
+	WaitTimeFormatted            string            `json:"waitTimeFormatted,omitempty"`
+	RequestStartTime             float64           `json:"requestStartTime,omitempty"`
+	RequestStartTimeFormatted    string            `json:"requestStartTimeFormatted,omitempty"`
+	ResponseStartTime            float64           `json:"responseStartTime,omitempty"`
+	ResponseStartTimeFormatted   string            `json:"responseStartTimeFormatted,omitempty"`
+	QueuedTime                   float64           `json:"queuedTime,omitempty"` // Time from navigation start to request start
+	QueuedTimeFormatted          string            `json:"queuedTimeFormatted,omitempty"`
+	Total                        float64           `json:"total,omitempty"`          // Sum of all timing phases in milliseconds
+	TotalFormatted               string            `json:"totalFormatted,omitempty"` // Formatted representation (ms or s)
 }
 
 func ShouldIncludeNetworkEvent(cfg Config, ev *cdpnetwork.EventResponseReceived) bool {
@@ -136,7 +162,34 @@ func ShouldIncludeNetworkEvent(cfg Config, ev *cdpnetwork.EventResponseReceived)
 	return true
 }
 
-func BuildNetworkEntryFromEvent(ev *cdpnetwork.EventResponseReceived, requestMethod string) NetworkEntry {
+func FormatTiming(ms float64) string {
+	if ms <= 0 {
+		return ""
+	}
+	if ms >= 1000 {
+		return fmt.Sprintf("%.2fs", ms/1000.0)
+	}
+	return fmt.Sprintf("%.2fms", ms)
+}
+
+var navigationStartTime float64 = -1
+
+var responseStartTimesMap = sync.Map{}
+
+func StoreResponseStartTime(requestID string, responseStartTime float64) {
+	responseStartTimesMap.Store(requestID, responseStartTime)
+}
+
+func GetResponseStartTime(requestID string) (float64, bool) {
+	if val, ok := responseStartTimesMap.Load(requestID); ok {
+		if timeVal, ok := val.(float64); ok {
+			return timeVal, true
+		}
+	}
+	return 0, false
+}
+
+func BuildNetworkEntryFromEvent(ev *cdpnetwork.EventResponseReceived, requestMethod string, requestTiming *cdpnetwork.ResourceTiming, responseTime float64, requestTime float64) NetworkEntry {
 	response := ev.Response
 	headers := make(map[string]string)
 	for name, value := range response.Headers {
@@ -150,15 +203,104 @@ func BuildNetworkEntryFromEvent(ev *cdpnetwork.EventResponseReceived, requestMet
 	if method == "" {
 		method = "GET"
 	}
+	var duration, ttfb, connectTime, dnsTime, sslTime, receiveTime, sendTime, waitTime float64
+	var requestStartTime, responseStartTime float64
+	if requestTiming != nil {
+		if requestTiming.RequestTime >= 0 {
+			requestStartTime = requestTiming.RequestTime
+		}
+		if requestTiming.DNSStart >= 0 && requestTiming.DNSEnd >= 0 {
+			dnsTime = requestTiming.DNSEnd - requestTiming.DNSStart
+		}
+		if requestTiming.ConnectStart >= 0 && requestTiming.ConnectEnd >= 0 {
+			connectTime = requestTiming.ConnectEnd - requestTiming.ConnectStart
+		}
+		if requestTiming.SslStart >= 0 && requestTiming.SslEnd >= 0 {
+			sslTime = requestTiming.SslEnd - requestTiming.SslStart
+		}
+		if requestTiming.SendStart >= 0 && requestTiming.SendEnd >= 0 {
+			sendTime = requestTiming.SendEnd - requestTiming.SendStart
+		}
+		if requestTiming.SendEnd >= 0 && requestTiming.ReceiveHeadersStart >= 0 {
+			waitTime = requestTiming.ReceiveHeadersStart - requestTiming.SendEnd
+			if requestTiming.SendStart >= 0 && requestTiming.ReceiveHeadersStart >= requestTiming.SendStart {
+				ttfb = requestTiming.ReceiveHeadersStart - requestTiming.SendStart
+			}
+		}
+		if requestTiming.ReceiveHeadersStart >= 0 && requestTiming.ReceiveHeadersEnd >= 0 {
+			receiveTime = requestTiming.ReceiveHeadersEnd - requestTiming.ReceiveHeadersStart
+		}
+		if requestTiming.ReceiveHeadersEnd >= 0 && requestTiming.RequestTime >= 0 && requestTiming.ReceiveHeadersEnd >= requestTiming.RequestTime {
+			duration = requestTiming.ReceiveHeadersEnd - requestTiming.RequestTime
+		} else if requestTime > 0 && responseTime > 0 {
+			duration = responseTime - requestTime
+		}
+		if requestTiming.ReceiveHeadersStart >= 0 {
+			responseStartTime = requestTiming.ReceiveHeadersStart
+		}
+	} else {
+		if requestTime > 0 && responseTime > 0 {
+			duration = responseTime - requestTime
+			requestStartTime = requestTime
+			responseStartTime = responseTime
+		}
+	}
+	var queuedTime float64
+	if requestTiming != nil {
+		if requestTiming.RequestTime >= 0 {
+			if ev.Type == cdpnetwork.ResourceTypeDocument && navigationStartTime < 0 {
+				navigationStartTime = requestTiming.RequestTime
+				queuedTime = 0
+			} else if navigationStartTime >= 0 {
+				queuedTime = requestTiming.RequestTime - navigationStartTime
+			} else {
+				queuedTime = requestTiming.RequestTime
+				navigationStartTime = requestTiming.RequestTime
+			}
+		}
+		if requestTiming.SendStart >= 0 {
+			requestStartTime = requestTiming.SendStart
+		} else if requestTiming.RequestTime >= 0 {
+			requestStartTime = requestTiming.RequestTime
+		}
+	}
+	total := queuedTime + dnsTime + connectTime + sslTime + sendTime + waitTime + receiveTime
+
 	return NetworkEntry{
-		URL:          response.URL,
-		Method:       method,
-		Status:       int(response.Status),
-		Headers:      headers,
-		Timestamp:    time.Now(),
-		Type:         string(response.MimeType),
-		Size:         int64(response.EncodedDataLength),
-		ResourceType: ev.Type.String(),
+		URL:                          response.URL,
+		Method:                       method,
+		Status:                       int(response.Status),
+		Headers:                      headers,
+		Timestamp:                    time.Now(),
+		Type:                         string(response.MimeType),
+		Size:                         int64(response.EncodedDataLength),
+		ResourceType:                 ev.Type.String(),
+		Duration:                     duration,
+		DurationFormatted:            FormatTiming(duration),
+		TimeToFirstByte:              ttfb,
+		TimeToFirstByteFormatted:     FormatTiming(ttfb),
+		ConnectTime:                  connectTime,
+		ConnectTimeFormatted:         FormatTiming(connectTime),
+		DNSLookupTime:                dnsTime,
+		DNSLookupTimeFormatted:       FormatTiming(dnsTime),
+		SSLTime:                      sslTime,
+		SSLTimeFormatted:             FormatTiming(sslTime),
+		ReceiveTime:                  receiveTime,
+		ReceiveTimeFormatted:         FormatTiming(receiveTime),
+		ContentDownloadTime:          0,
+		ContentDownloadTimeFormatted: "",
+		SendTime:                     sendTime,
+		SendTimeFormatted:            FormatTiming(sendTime),
+		WaitTime:                     waitTime,
+		WaitTimeFormatted:            FormatTiming(waitTime),
+		RequestStartTime:             requestStartTime,
+		RequestStartTimeFormatted:    FormatTiming(requestStartTime),
+		ResponseStartTime:            responseStartTime,
+		ResponseStartTimeFormatted:   FormatTiming(responseStartTime),
+		QueuedTime:                   queuedTime,
+		QueuedTimeFormatted:          FormatTiming(queuedTime),
+		Total:                        total,
+		TotalFormatted:               FormatTiming(total),
 	}
 }
 
@@ -276,12 +418,16 @@ func StreamLogsRealTime(cfg Config, ctx context.Context, url string, onLog func(
 	}
 	requestMethods := sync.Map{}
 	requestURLs := sync.Map{}
+	requestStartTimes := sync.Map{}
+	networkEntriesMap := sync.Map{}
+	pageStartTime := time.Now()
 	chromedp.ListenTarget(ctx, func(ev interface{}) {
 		if cfg.ShowNetwork {
 			if ev, ok := ev.(*cdpnetwork.EventRequestWillBeSent); ok {
 				if ev.Request != nil {
 					requestMethods.Store(ev.RequestID.String(), ev.Request.Method)
 					requestURLs.Store(ev.RequestID.String(), ev.Request.URL)
+					requestStartTimes.Store(ev.RequestID.String(), float64(time.Since(pageStartTime).Nanoseconds())/1e6)
 				}
 			}
 		}
@@ -325,7 +471,44 @@ func StreamLogsRealTime(cfg Config, ctx context.Context, url string, onLog func(
 						method = methodStr
 					}
 				}
-				onNet(BuildNetworkEntryFromEvent(ev, method))
+				var requestTiming *cdpnetwork.ResourceTiming
+				var requestStartTime, responseTime float64
+				if ev.Response != nil && ev.Response.Timing != nil {
+					requestTiming = ev.Response.Timing
+				}
+				if timeVal, ok := requestStartTimes.Load(ev.RequestID.String()); ok {
+					if timeFloat, ok := timeVal.(float64); ok {
+						requestStartTime = timeFloat
+					}
+				}
+				responseTime = float64(time.Since(pageStartTime).Nanoseconds()) / 1e6
+				ne := BuildNetworkEntryFromEvent(ev, method, requestTiming, responseTime, requestStartTime)
+				if ne.ResponseStartTime > 0 {
+					responseStartTimesMap.Store(ev.RequestID.String(), responseTime)
+				}
+				onNet(ne)
+				networkEntriesMap.Store(ev.RequestID.String(), ne)
+			}
+			if ev, ok := ev.(*cdpnetwork.EventLoadingFinished); ok {
+				if entryVal, ok := networkEntriesMap.Load(ev.RequestID.String()); ok {
+					if entry, ok := entryVal.(NetworkEntry); ok {
+						loadingFinishedTime := float64(time.Since(pageStartTime).Nanoseconds()) / 1e6
+						if responseStartTimeVal, ok := responseStartTimesMap.Load(ev.RequestID.String()); ok {
+							if responseStartTime, ok := responseStartTimeVal.(float64); ok {
+								entry.ContentDownloadTime = loadingFinishedTime - responseStartTime
+								entry.ContentDownloadTimeFormatted = FormatTiming(entry.ContentDownloadTime)
+								if entry.Duration > 0 && entry.ContentDownloadTime > 0 {
+									entry.Duration = entry.Duration + entry.ContentDownloadTime
+									entry.DurationFormatted = FormatTiming(entry.Duration)
+								}
+								entry.Total = entry.Total + entry.ContentDownloadTime
+								entry.TotalFormatted = FormatTiming(entry.Total)
+								networkEntriesMap.Store(ev.RequestID.String(), entry)
+								onNet(entry)
+							}
+						}
+					}
+				}
 			}
 			// Network loading failures
 			if ev, ok := ev.(*cdpnetwork.EventLoadingFailed); ok {

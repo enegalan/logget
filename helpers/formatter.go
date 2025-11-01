@@ -288,10 +288,28 @@ func (f *OutputFormatter) FormatNetworkCSV(entries []NetworkEntry, includeHeader
 	var buf bytes.Buffer
 	w := csv.NewWriter(&buf)
 	if includeHeader {
-		_ = w.Write([]string{"timestamp", "method", "url", "status", "resourceType", "mimeType", "size", "error", "errorType"})
+		_ = w.Write([]string{"timestamp", "method", "url", "status", "resourceType", "mimeType", "size", "duration", "ttfb", "connectTime", "dnsTime", "sslTime", "sendTime", "waitTime", "receiveTime", "error", "errorType"})
 	}
 	for _, ne := range entries {
-		_ = w.Write([]string{ne.Timestamp.Format(time.RFC3339), ne.Method, ne.URL, fmt.Sprintf("%d", ne.Status), ne.ResourceType, ne.Type, fmt.Sprintf("%d", ne.Size), ne.Error, ne.ErrorType})
+		_ = w.Write([]string{
+			ne.Timestamp.Format(time.RFC3339),
+			ne.Method,
+			ne.URL,
+			fmt.Sprintf("%d", ne.Status),
+			ne.ResourceType,
+			ne.Type,
+			fmt.Sprintf("%d", ne.Size),
+			fmt.Sprintf("%.2f", ne.Duration),
+			fmt.Sprintf("%.2f", ne.TimeToFirstByte),
+			fmt.Sprintf("%.2f", ne.ConnectTime),
+			fmt.Sprintf("%.2f", ne.DNSLookupTime),
+			fmt.Sprintf("%.2f", ne.SSLTime),
+			fmt.Sprintf("%.2f", ne.SendTime),
+			fmt.Sprintf("%.2f", ne.WaitTime),
+			fmt.Sprintf("%.2f", ne.ReceiveTime),
+			ne.Error,
+			ne.ErrorType,
+		})
 	}
 	w.Flush()
 	return buf.String()
@@ -316,11 +334,29 @@ func (f *OutputFormatter) FormatAndOutputNetworkCSVRow(ne NetworkEntry, cfg Conf
 	var buf bytes.Buffer
 	w := csv.NewWriter(&buf)
 	if includeHeader {
-		if err := w.Write([]string{"timestamp", "method", "url", "status", "resourceType", "mimeType", "size", "error", "errorType"}); err != nil {
+		if err := w.Write([]string{"timestamp", "method", "url", "status", "resourceType", "mimeType", "size", "duration", "ttfb", "connectTime", "dnsTime", "sslTime", "sendTime", "waitTime", "receiveTime", "error", "errorType"}); err != nil {
 			return fmt.Errorf("failed to write CSV header: %v", err)
 		}
 	}
-	if err := w.Write([]string{ne.Timestamp.Format(time.RFC3339), ne.Method, ne.URL, fmt.Sprintf("%d", ne.Status), ne.ResourceType, ne.Type, fmt.Sprintf("%d", ne.Size), ne.Error, ne.ErrorType}); err != nil {
+	if err := w.Write([]string{
+		ne.Timestamp.Format(time.RFC3339),
+		ne.Method,
+		ne.URL,
+		fmt.Sprintf("%d", ne.Status),
+		ne.ResourceType,
+		ne.Type,
+		fmt.Sprintf("%d", ne.Size),
+		fmt.Sprintf("%.2f", ne.Duration),
+		fmt.Sprintf("%.2f", ne.TimeToFirstByte),
+		fmt.Sprintf("%.2f", ne.ConnectTime),
+		fmt.Sprintf("%.2f", ne.DNSLookupTime),
+		fmt.Sprintf("%.2f", ne.SSLTime),
+		fmt.Sprintf("%.2f", ne.SendTime),
+		fmt.Sprintf("%.2f", ne.WaitTime),
+		fmt.Sprintf("%.2f", ne.ReceiveTime),
+		ne.Error,
+		ne.ErrorType,
+	}); err != nil {
 		return fmt.Errorf("failed to write CSV row: %v", err)
 	}
 	w.Flush()

@@ -29,4 +29,5 @@ type Config struct {
 	MaxSize             int64
 	RotateFingerprints  bool
 	FingerprintInterval int
+	HAROutput           bool
 }

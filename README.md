@@ -15,6 +15,8 @@ A command-line tool similar to `curl` that extracts browser logs and network dat
 - **Cookie Support**: Set cookies for authenticated requests (supports files)
 - **Configurable Timeout**: Set custom timeout values
 - **Fingerprint Rotation**: Rotate navigator fingerprints (userAgent, platform, language, screen properties, WebGL, Canvas) to prevent tracking
+- **Performance Metrics**: Detailed timing metrics (Duration, TTFB, Connect Time, DNS, SSL, Send, Wait, Receive times, Content Download Time, Queued Time, Total)
+- **HAR Export**: Export network data in HAR (HTTP Archive) format
 
 ## Installation
 
@@ -65,11 +67,20 @@ logget --logs --network https://example.com
 # Output in JSON format
 logget --logs --network --json https://example.com
 
+# Output in CSV format
+logget --logs --network --csv https://example.com
+
+# Output in HAR format
+logget --network --har https://example.com
+
 # Write output to a file
 logget --logs --output results.txt https://example.com
 
 # Write JSON output to a file
 logget --logs --json --output results.json https://example.com
+
+# Write HAR output to a file
+logget --network --har --output network.har https://example.com
 
 # Append output to an existing file
 logget --logs --output results.txt --append https://example.com
@@ -210,6 +221,7 @@ logget --no-rotate-fingerprints --network https://example.com
 - `--network`, `-N`: Capture and display network requests
 - `--json`, `-J`: Output results in JSON format
 - `--csv`: Output results in CSV format
+- `--har`: Output results in HAR (HTTP Archive) format
 - `--no-color`: Disable colored output
 - `--quiet`, `-q`: Suppress progress messages, only show data (errors and warnings still displayed)
 - `--output`, `-o` `<filename>`: Write to file instead of stdout
@@ -256,6 +268,9 @@ logget https://example.com --logs --output results.txt --append
 
 # Works with JSON output too
 logget https://example.com --logs --json --output data.json
+
+# Works with HAR output too
+logget --network --har --output network.har https://example.com
 
 # Append JSON output to existing file
 logget https://example.com --logs --json --output data.json --append
@@ -361,6 +376,32 @@ In follow mode (`-f`), each log entry and network request is output as a separat
 - `type` (string): MIME type of the response (e.g., `"text/html"`, `"application/json"`)
 - `size` (integer): Size of the response in bytes
 - `resourceType` (string): Resource type (e.g., `"Document"`, `"XHR"`, `"Image"`, `"Script"`, `"Stylesheet"`, `"Font"`, `"Media"`, `"Manifest"`, `"WebSocket"`, `"Other"`)
+- `duration` (float, optional): Total request duration in milliseconds
+- `durationFormatted` (string, optional): Formatted duration (e.g., `"123.45ms"` or `"1.23s"`)
+- `timeToFirstByte` (float, optional): Time to first byte (TTFB) in milliseconds
+- `timeToFirstByteFormatted` (string, optional): Formatted TTFB (e.g., `"50.23ms"` or `"0.50s"`)
+- `connectTime` (float, optional): Connection establishment time in milliseconds
+- `connectTimeFormatted` (string, optional): Formatted connect time
+- `dnsLookupTime` (float, optional): DNS lookup time in milliseconds
+- `dnsLookupTimeFormatted` (string, optional): Formatted DNS lookup time
+- `sslTime` (float, optional): SSL/TLS handshake time in milliseconds (HTTPS only)
+- `sslTimeFormatted` (string, optional): Formatted SSL time
+- `sendTime` (float, optional): Time to send request in milliseconds
+- `sendTimeFormatted` (string, optional): Formatted send time
+- `waitTime` (float, optional): Wait time (server processing) in milliseconds
+- `waitTimeFormatted` (string, optional): Formatted wait time
+- `receiveTime` (float, optional): Time to receive response headers in milliseconds
+- `receiveTimeFormatted` (string, optional): Formatted receive time
+- `contentDownloadTime` (float, optional): Full content download time (body + headers) in milliseconds
+- `contentDownloadTimeFormatted` (string, optional): Formatted content download time
+- `queuedTime` (float, optional): Time from navigation start to request start in milliseconds
+- `queuedTimeFormatted` (string, optional): Formatted queued time
+- `requestStartTime` (float, optional): Request start time relative to navigation start in milliseconds
+- `requestStartTimeFormatted` (string, optional): Formatted request start time
+- `responseStartTime` (float, optional): Response start time relative to navigation start in milliseconds
+- `responseStartTimeFormatted` (string, optional): Formatted response start time
+- `total` (float, optional): Sum of all timing phases (Queued + DNS + Connect + SSL + Send + Wait + Receive + ContentDownload) in milliseconds
+- `totalFormatted` (string, optional): Formatted total time (e.g., `"863.12ms"` or `"0.86s"`)
 
 ### CSV Schema
 
@@ -391,13 +432,21 @@ timestamp,level,source,message
 5. `resourceType` (string): Resource type (e.g., `Document`, `XHR`, `Image`, `Script`, `Stylesheet`, `Font`, `Media`, `Manifest`, `WebSocket`, `Other`)
 6. `mimeType` (string): MIME type of the response (e.g., `text/html`, `application/json`)
 7. `size` (string): Size of the response in bytes as string (e.g., `"1234"`)
+8. `duration` (string): Total request duration in milliseconds (e.g., `"123.45"`)
+9. `ttfb` (string): Time to first byte in milliseconds (e.g., `"50.23"`)
+10. `connectTime` (string): Connection time in milliseconds (e.g., `"10.12"`)
+11. `dnsTime` (string): DNS lookup time in milliseconds (e.g., `"5.34"`)
+12. `sslTime` (string): SSL/TLS handshake time in milliseconds (e.g., `"20.56"`)
+13. `sendTime` (string): Time to send request in milliseconds (e.g., `"2.10"`)
+14. `waitTime` (string): Wait time (server processing) in milliseconds (e.g., `"30.45"`)
+15. `receiveTime` (string): Time to receive response in milliseconds (e.g., `"15.67"`)
 
 **Example:**
 ```csv
-timestamp,method,url,status,resourceType,mimeType,size
-2024-10-31T23:00:00Z,GET,https://example.com/,200,Document,text/html,184
-2024-10-31T23:00:01Z,GET,https://example.com/api/data,200,XHR,application/json,1234
-2024-10-31T23:00:02Z,GET,https://example.com/favicon.ico,404,Other,text/html,230
+timestamp,method,url,status,resourceType,mimeType,size,duration,ttfb,connectTime,dnsTime,sslTime,sendTime,waitTime,receiveTime
+2024-10-31T23:00:00Z,GET,https://example.com/,200,Document,text/html,184,123.45,50.23,10.12,5.34,20.56,2.10,30.45,15.67
+2024-10-31T23:00:01Z,GET,https://example.com/api/data,200,XHR,application/json,1234,234.56,100.12,15.23,8.45,25.67,3.20,50.34,20.45
+2024-10-31T23:00:02Z,GET,https://example.com/favicon.ico,404,Other,text/html,230,45.67,20.34,5.12,3.45,0.00,1.50,10.23,5.12
 ```
 
 **CSV Format Notes:**
@@ -405,6 +454,40 @@ timestamp,method,url,status,resourceType,mimeType,size
 - Values containing commas, quotes, or newlines are properly escaped according to RFC 4180
 - Timestamps use RFC3339 format (e.g., `2024-10-31T23:00:00Z`)
 - In follow mode (`-f`), CSV rows are streamed one at a time with the header written once at the start
+
+### HAR Schema
+
+When using `--har`, logget outputs network data in HAR (HTTP Archive) format. HAR files can be analyzed with browser DevTools, HAR viewers, or other analysis tools.
+
+**Usage:**
+```bash
+# Output HAR to stdout
+logget --network --har https://example.com
+
+# Output HAR to file
+logget --network --har --output network.har https://example.com
+```
+
+**Example HAR Structure:**
+```json
+{
+  "log": {
+    "version": "1.2",
+    "creator": {
+      "name": "logget",
+      "version": "2.0"
+    },
+    "pages": [...],
+    "entries": [
+      {
+        "request": {...},
+        "response": {...},
+        "timings": {...}
+      }
+    ]
+  }
+}
+```
 
 ## Use Cases
 

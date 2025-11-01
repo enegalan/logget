@@ -50,3 +50,19 @@ func LogOutputFileSuccess(cfg Config, outputType string, logger *Logger) {
 		logger.Success("%s written to: %s", outputType, filePath)
 	}
 }
+
+func WriteHAROutput(filePath string, harData []byte) error {
+	file, err := os.Create(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to create HAR file: %v", err)
+	}
+	defer file.Close()
+	if _, err = file.Write(harData); err != nil {
+		return fmt.Errorf("failed to write HAR file: %v", err)
+	}
+	return nil
+}
+
+func LogHARFileSuccess(filePath string, logger *Logger) {
+	logger.Success("HAR file written to: %s", filePath)
+}
