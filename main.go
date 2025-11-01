@@ -50,6 +50,8 @@ var (
 	version          string = "dev"
 	responseHeaders  map[string]string
 	responseCaptured bool
+	requestHeaders   map[string]string
+	requestCaptured  bool
 
 	followMode      bool
 	filterPattern   flags.RegexPattern
@@ -215,6 +217,8 @@ func processURL(url string) {
 	var responseStatusCode int = initialStatusCode
 	responseHeaders = make(map[string]string)
 	responseCaptured = false
+	requestHeaders = make(map[string]string)
+	requestCaptured = false
 	startTime := time.Now()
 	logger.Progress("Initializing browser context...")
 	if showLogs {
@@ -230,11 +234,45 @@ func processURL(url string) {
 		}
 	}
 	requestMethods := sync.Map{}
+	requestHeadersMap := sync.Map{}
+	requestURLs := sync.Map{}
 	chromedp.ListenTarget(ctx, func(ev interface{}) {
 		if showNetwork || verbose {
 			if ev, ok := ev.(*cdpnetwork.EventRequestWillBeSent); ok {
 				if ev.Request != nil {
 					requestMethods.Store(ev.RequestID.String(), ev.Request.Method)
+					requestURLs.Store(ev.RequestID.String(), ev.Request.URL)
+					headers := make(map[string]string)
+					for name, value := range ev.Request.Headers {
+						if str, ok := value.(string); ok {
+							headers[name] = str
+						} else {
+							headers[name] = fmt.Sprintf("%v", value)
+						}
+					}
+					requestHeadersMap.Store(ev.RequestID.String(), headers)
+					if verbose && !requestCaptured && ev.Request.URL == url {
+						requestHeaders = headers
+						requestCaptured = true
+					}
+				}
+			}
+			if ev, ok := ev.(*cdpnetwork.EventRequestWillBeSentExtraInfo); ok {
+				if urlVal, ok := requestURLs.Load(ev.RequestID.String()); ok {
+					if requestURL, ok := urlVal.(string); ok && requestURL == url {
+						headers := make(map[string]string)
+						for name, value := range ev.Headers {
+							if str, ok := value.(string); ok {
+								headers[name] = str
+							} else {
+								headers[name] = fmt.Sprintf("%v", value)
+							}
+						}
+						if verbose {
+							requestHeaders = headers
+							requestCaptured = true
+						}
+					}
 				}
 			}
 		}
@@ -292,6 +330,11 @@ func processURL(url string) {
 			}
 		}
 	})
+	if len(headers) > 0 || userAgent.Get() != "" {
+		if err := helpers.SetHeaders(ctx, userAgent.Get(), []string(headers)); err != nil {
+			logger.Fatal("Failed to set headers: %v", err)
+		}
+	}
 	// Set cookies if provided
 	if len(cookies) > 0 {
 		logger.Progress("Setting cookies...")
@@ -468,7 +511,15 @@ func processURL(url string) {
 		var outputContent strings.Builder
 		if verbose && !jsonOutput && !csvOutput {
 			outputContent.WriteString(formatter.FormatHTTPResponse(responseProtocol, statusCode, duration))
-			outputContent.WriteString(formatter.FormatRequestHeaders(helpers.GenerateDynamicHeaders(cfg, url)))
+			var requestHeadersList []string
+			if requestCaptured && len(requestHeaders) > 0 {
+				for name, value := range requestHeaders {
+					requestHeadersList = append(requestHeadersList, fmt.Sprintf("%s: %s", name, value))
+				}
+			} else {
+				requestHeadersList = helpers.GenerateHeaders(cfg, url)
+			}
+			outputContent.WriteString(formatter.FormatRequestHeaders(requestHeadersList))
 			outputContent.WriteString(formatter.FormatResponseHeaders(responseHeaders))
 		}
 		if showLogs && len(logs) > 0 {

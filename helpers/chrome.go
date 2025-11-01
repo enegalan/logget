@@ -240,6 +240,11 @@ func StreamLogsRealTime(cfg Config, ctx context.Context, url string, onLog func(
 			}
 		}
 	})
+	if len(cfg.Headers) > 0 || cfg.UserAgent != "" {
+		if err := SetHeaders(ctx, cfg.UserAgent, cfg.Headers); err != nil {
+			return fmt.Errorf("failed to set headers: %v", err)
+		}
+	}
 	if len(cfg.Cookies) > 0 {
 		if err := SetCookies(ctx, url, cfg.Cookies); err != nil {
 			return fmt.Errorf("failed to set cookies: %v", err)

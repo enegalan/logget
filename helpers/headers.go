@@ -1,11 +1,15 @@
 package helpers
 
 import (
+	"context"
 	"fmt"
 	"strings"
+
+	cdpnetwork "github.com/chromedp/cdproto/network"
+	"github.com/chromedp/chromedp"
 )
 
-func GenerateDynamicHeaders(cfg Config, url string) []string {
+func GenerateHeaders(cfg Config, url string) []string {
 	customHeaderMap := make(map[string]string)
 	for _, header := range cfg.Headers {
 		if colonIndex := strings.Index(header, ":"); colonIndex != -1 {
@@ -15,7 +19,6 @@ func GenerateDynamicHeaders(cfg Config, url string) []string {
 		}
 	}
 	var headers []string
-	headers = append(headers, fmt.Sprintf("Host: %s", GetHostFromURL(url)))
 	if customUA, exists := customHeaderMap["user-agent"]; exists {
 		headers = append(headers, fmt.Sprintf("User-Agent: %s", customUA))
 	} else {
@@ -95,4 +98,29 @@ func GenerateDynamicHeaders(cfg Config, url string) []string {
 		}
 	}
 	return headers
+}
+
+func SetHeaders(ctx context.Context, userAgent string, headers []string) error {
+	headersMap := make(cdpnetwork.Headers)
+	hasUserAgent := false
+	for _, header := range headers {
+		if colonIndex := strings.Index(header, ":"); colonIndex != -1 {
+			key := strings.TrimSpace(header[:colonIndex])
+			value := strings.TrimSpace(header[colonIndex+1:])
+			keyLower := strings.ToLower(key)
+			if keyLower == "user-agent" {
+				hasUserAgent = true
+			}
+			headersMap[key] = value
+		}
+	}
+	if !hasUserAgent && userAgent != "" {
+		headersMap["User-Agent"] = userAgent
+	}
+	if len(headersMap) > 0 {
+		if err := chromedp.Run(ctx, cdpnetwork.SetExtraHTTPHeaders(headersMap)); err != nil {
+			return fmt.Errorf("failed to set extra HTTP headers: %v", err)
+		}
+	}
+	return nil
 }
