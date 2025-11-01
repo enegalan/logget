@@ -378,14 +378,9 @@ timestamp,method,url,status,resourceType,mimeType,size
 - **Testing**: Verify network requests and console output
 - **Monitoring**: Track application behavior and performance
 - **Security Analysis**: Inspect network traffic and JavaScript execution
-- **API Testing**: Monitor API calls and responses
 - **Automation**: Save results to files for batch processing and analysis
 - **Logging**: Create organized log files with timestamps and structured data
-- **Continuous Monitoring**: Append multiple runs to the same file for historical tracking
-- **CI/CD Integration**: Generate reports and artifacts for continuous integration pipelines
-- **Data Collection**: Accumulate data from multiple sources into single files
 - **AI Utility**: Allow your AI agents use this command for efficient debugging
-- **Real-time Monitoring**: Stream logs from web applications as they happen
 
 ## Comparison with curl
 
