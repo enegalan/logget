@@ -5,7 +5,6 @@ type Config struct {
 	Headers        []string
 	Cookies        []string
 	OutputFile     string
-	OutputDir      string
 	AppendMode     bool
 	FollowMode     bool
 	SkipSSLVerify  bool

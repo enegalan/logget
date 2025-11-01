@@ -3,22 +3,13 @@ package helpers
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 )
 
 var fileWriteState = make(map[string]bool)
 
 func WriteOutput(cfg Config, content string) error {
 	if cfg.OutputFile != "" {
-		var filePath string
-		if cfg.OutputDir != "" {
-			if err := os.MkdirAll(cfg.OutputDir, 0755); err != nil {
-				return fmt.Errorf("failed to create output directory: %v", err)
-			}
-			filePath = filepath.Join(cfg.OutputDir, cfg.OutputFile)
-		} else {
-			filePath = cfg.OutputFile
-		}
+		filePath := cfg.OutputFile
 		var file *os.File
 		var err error
 		if cfg.FollowMode {
@@ -52,12 +43,7 @@ func WriteOutput(cfg Config, content string) error {
 }
 
 func LogOutputFileSuccess(cfg Config, outputType string, logger *Logger) {
-	var filePath string
-	if cfg.OutputDir != "" {
-		filePath = filepath.Join(cfg.OutputDir, cfg.OutputFile)
-	} else {
-		filePath = cfg.OutputFile
-	}
+	filePath := cfg.OutputFile
 	if cfg.AppendMode {
 		logger.Success("%s appended to: %s", outputType, filePath)
 	} else {

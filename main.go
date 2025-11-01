@@ -10,7 +10,6 @@ import (
 	"logget/helpers/flags"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"syscall"
@@ -46,7 +45,6 @@ var (
 	versionFlag      bool
 	verbose          bool
 	outputFile       string
-	outputDir        string
 	appendMode       bool
 	version          string = "dev"
 	responseHeaders  map[string]string
@@ -96,7 +94,6 @@ func main() {
 	rootCmd.Flags().VarP(&headers, "header", "H", "Add custom headers (format: 'Key: Value') or filename containing headers")
 	rootCmd.Flags().VarP(&cookies, "cookie", "C", "Add cookies (format: 'name=value' or 'name=value; domain=example.com') or filename containing cookies")
 	rootCmd.Flags().StringVarP(&outputFile, "output", "o", "", "Write to file instead of stdout")
-	rootCmd.Flags().StringVar(&outputDir, "output-dir", "", "Directory to save files in")
 	rootCmd.Flags().BoolVarP(&appendMode, "append", "a", false, "Append to file instead of overwriting")
 	rootCmd.Flags().BoolVarP(&versionFlag, "version", "v", false, "Show version information")
 	rootCmd.Flags().BoolVarP(&verbose, "verbose", "V", false, "Show detailed HTTP protocol information")
@@ -146,7 +143,6 @@ func processURL(url string) {
 		Headers:        []string(headers),
 		Cookies:        []string(cookies),
 		OutputFile:     outputFile,
-		OutputDir:      outputDir,
 		AppendMode:     appendMode,
 		FollowMode:     followMode,
 		SkipSSLVerify:  skipSSLVerify,
@@ -291,15 +287,7 @@ func processURL(url string) {
 	// Handle follow mode
 	if followMode {
 		if cfg.OutputFile != "" {
-			var filePath string
-			if cfg.OutputDir != "" {
-				if err := os.MkdirAll(cfg.OutputDir, 0755); err != nil {
-					logger.Fatal("Failed to create output directory: %v", err)
-				}
-				filePath = filepath.Join(cfg.OutputDir, cfg.OutputFile)
-			} else {
-				filePath = cfg.OutputFile
-			}
+			filePath := cfg.OutputFile
 			var testFile *os.File
 			var testErr error
 			if cfg.AppendMode {
