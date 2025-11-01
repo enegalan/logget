@@ -76,6 +76,8 @@ var (
 	websocketOnly bool
 	noColor       bool
 	quiet         bool
+	minSize       flags.SizeBytes
+	maxSize       flags.SizeBytes
 )
 
 func main() {
@@ -119,6 +121,8 @@ func main() {
 	rootCmd.Flags().BoolVar(&mediaOnly, "media", false, "Only include Media requests")
 	rootCmd.Flags().BoolVar(&manifestOnly, "manifest", false, "Only include Manifest requests")
 	rootCmd.Flags().BoolVar(&websocketOnly, "socket", false, "Only include WebSocket requests")
+	rootCmd.Flags().VarP(&minSize, "min-size", "", "Only include requests whose size is at least this many bytes")
+	rootCmd.Flags().VarP(&maxSize, "max-size", "", "Only include requests whose size is at most this many bytes")
 	rootCmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress progress messages, only show data")
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -169,6 +173,8 @@ func processURL(url string) {
 		MediaOnly:      mediaOnly,
 		ManifestOnly:   manifestOnly,
 		WebSocketOnly:  websocketOnly,
+		MinSize:        minSize.Get(),
+		MaxSize:        maxSize.Get(),
 	}
 	// Quick check: if no data collection flags are specified, show help immediately
 	if !showLogs && !showNetwork && !verbose && !jsonOutput && !followMode {
@@ -434,6 +440,12 @@ func processURL(url string) {
 		}
 		onNet := func(ne helpers.NetworkEntry) {
 			if !helpers.ShouldShowLine(ne.URL, filterRegex, excludeRegex) {
+				return
+			}
+			if cfg.MinSize > 0 && ne.Size < cfg.MinSize {
+				return
+			}
+			if cfg.MaxSize > 0 && ne.Size > cfg.MaxSize {
 				return
 			}
 			if jsonOutput {

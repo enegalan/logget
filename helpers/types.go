@@ -25,4 +25,6 @@ type Config struct {
 	MediaOnly      bool
 	ManifestOnly   bool
 	WebSocketOnly  bool
+	MinSize        int64
+	MaxSize        int64
 }

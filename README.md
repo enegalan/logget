@@ -176,6 +176,15 @@ logget --network --domain "^api\\.example\\.com$" https://example.com
 
 # Requests to subdomains of example.com
 logget --network --domain "(.*\\.)?example\\.com$" https://example.com
+
+# Only requests larger than 1KB
+logget --network --min-size 1024 https://example.com
+
+# Only requests smaller than 10KB
+logget --network --max-size 10240 https://example.com
+
+# Requests between 1KB and 100KB
+logget --network --min-size 1024 --max-size 102400 https://example.com
 ```
 
 ### Options
@@ -201,6 +210,8 @@ logget --network --domain "(.*\\.)?example\\.com$" https://example.com
 - `--status` `<regex>`: Only include requests whose HTTP status code matches this regex
 - `--domain` `<regex>`: Only include requests whose domain matches this regex
 - `--mime` `<regex>`: Only include requests whose MIME type matches this regex
+- `--min-size` `<bytes>`: Only include requests whose size is at least this many bytes
+- `--max-size` `<bytes>`: Only include requests whose size is at most this many bytes
 - `--refresh`: Refresh interval in milliseconds for real-time streaming (default: 100)
 - `--insecure`, `-k`: Skip SSL certificate verification (useful for self-signed certificates)
 - `--xhr`: Only include fetch/XHR requests

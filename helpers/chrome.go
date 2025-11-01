@@ -121,6 +121,18 @@ func ShouldIncludeNetworkEvent(cfg Config, ev *cdpnetwork.EventResponseReceived)
 			}
 		}
 	}
+	if cfg.MinSize > 0 || cfg.MaxSize > 0 {
+		if ev.Response == nil {
+			return false
+		}
+		size := int64(ev.Response.EncodedDataLength)
+		if cfg.MinSize > 0 && size < cfg.MinSize {
+			return false
+		}
+		if cfg.MaxSize > 0 && size > cfg.MaxSize {
+			return false
+		}
+	}
 	return true
 }
 
