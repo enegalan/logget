@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"regexp"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -228,7 +229,15 @@ func processURL(url string) {
 			logger.Error("Failed to enable network domain: %v", err)
 		}
 	}
+	requestMethods := sync.Map{}
 	chromedp.ListenTarget(ctx, func(ev interface{}) {
+		if showNetwork || verbose {
+			if ev, ok := ev.(*cdpnetwork.EventRequestWillBeSent); ok {
+				if ev.Request != nil {
+					requestMethods.Store(ev.RequestID.String(), ev.Request.Method)
+				}
+			}
+		}
 		// Browser logs
 		if showLogs {
 			if ev, ok := ev.(*cdplog.EventEntryAdded); ok {
@@ -266,7 +275,13 @@ func processURL(url string) {
 				if !helpers.ShouldIncludeNetworkEvent(cfg, ev) {
 					return
 				}
-				ne := helpers.BuildNetworkEntryFromEvent(ev)
+				var method string
+				if methodVal, ok := requestMethods.Load(ev.RequestID.String()); ok {
+					if methodStr, ok := methodVal.(string); ok {
+						method = methodStr
+					}
+				}
+				ne := helpers.BuildNetworkEntryFromEvent(ev, method)
 				if verbose && !responseCaptured {
 					responseHeaders = ne.Headers
 					responseCaptured = true

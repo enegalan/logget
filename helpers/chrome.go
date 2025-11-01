@@ -7,6 +7,7 @@ import (
 	neturl "net/url"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	cdplog "github.com/chromedp/cdproto/log"
@@ -121,7 +122,7 @@ func ShouldIncludeNetworkEvent(cfg Config, ev *cdpnetwork.EventResponseReceived)
 	return true
 }
 
-func BuildNetworkEntryFromEvent(ev *cdpnetwork.EventResponseReceived) NetworkEntry {
+func BuildNetworkEntryFromEvent(ev *cdpnetwork.EventResponseReceived, requestMethod string) NetworkEntry {
 	response := ev.Response
 	headers := make(map[string]string)
 	for name, value := range response.Headers {
@@ -131,9 +132,13 @@ func BuildNetworkEntryFromEvent(ev *cdpnetwork.EventResponseReceived) NetworkEnt
 			headers[name] = fmt.Sprintf("%v", value)
 		}
 	}
+	method := requestMethod
+	if method == "" {
+		method = "GET"
+	}
 	return NetworkEntry{
 		URL:          response.URL,
-		Method:       "GET",
+		Method:       method,
 		Status:       int(response.Status),
 		Headers:      headers,
 		Timestamp:    time.Now(),
@@ -182,7 +187,15 @@ func StreamLogsRealTime(cfg Config, ctx context.Context, url string, onLog func(
 			return fmt.Errorf("failed to enable network domain: %v", err)
 		}
 	}
+	requestMethods := sync.Map{}
 	chromedp.ListenTarget(ctx, func(ev interface{}) {
+		if cfg.ShowNetwork {
+			if ev, ok := ev.(*cdpnetwork.EventRequestWillBeSent); ok {
+				if ev.Request != nil {
+					requestMethods.Store(ev.RequestID.String(), ev.Request.Method)
+				}
+			}
+		}
 		if cfg.ShowLogs {
 			if ev, ok := ev.(*cdplog.EventEntryAdded); ok {
 				onLog(LogEntry{
@@ -217,7 +230,13 @@ func StreamLogsRealTime(cfg Config, ctx context.Context, url string, onLog func(
 				if !ShouldIncludeNetworkEvent(cfg, ev) {
 					return
 				}
-				onNet(BuildNetworkEntryFromEvent(ev))
+				var method string
+				if methodVal, ok := requestMethods.Load(ev.RequestID.String()); ok {
+					if methodStr, ok := methodVal.(string); ok {
+						method = methodStr
+					}
+				}
+				onNet(BuildNetworkEntryFromEvent(ev, method))
 			}
 		}
 	})
