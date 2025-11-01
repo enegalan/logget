@@ -44,7 +44,7 @@ var (
 	cookies          flags.CookieArray
 	versionFlag      bool
 	verbose          bool
-	outputFile       string
+	outputFile       flags.OutputFile
 	appendMode       bool
 	version          string = "dev"
 	responseHeaders  map[string]string
@@ -93,7 +93,7 @@ func main() {
 	rootCmd.Flags().StringVarP(&userAgent, "user-agent", "A", "logget/1.0", "Set User-Agent header")
 	rootCmd.Flags().VarP(&headers, "header", "H", "Add custom headers (format: 'Key: Value') or filename containing headers")
 	rootCmd.Flags().VarP(&cookies, "cookie", "C", "Add cookies (format: 'name=value' or 'name=value; domain=example.com') or filename containing cookies")
-	rootCmd.Flags().StringVarP(&outputFile, "output", "o", "", "Write to file instead of stdout")
+	rootCmd.Flags().VarP(&outputFile, "output", "o", "Write to file instead of stdout")
 	rootCmd.Flags().BoolVarP(&appendMode, "append", "a", false, "Append to file instead of overwriting")
 	rootCmd.Flags().BoolVarP(&versionFlag, "version", "v", false, "Show version information")
 	rootCmd.Flags().BoolVarP(&verbose, "verbose", "V", false, "Show detailed HTTP protocol information")
@@ -142,7 +142,7 @@ func processURL(url string) {
 		UserAgent:      userAgent,
 		Headers:        []string(headers),
 		Cookies:        []string(cookies),
-		OutputFile:     outputFile,
+		OutputFile:     outputFile.Get(),
 		AppendMode:     appendMode,
 		FollowMode:     followMode,
 		SkipSSLVerify:  skipSSLVerify,
