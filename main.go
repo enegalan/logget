@@ -89,7 +89,7 @@ func main() {
 	rootCmd.Flags().BoolVarP(&jsonOutput, "json", "J", false, "Output in JSON format")
 	rootCmd.Flags().BoolVar(&csvOutput, "csv", false, "Output in CSV format")
 	rootCmd.Flags().IntVarP(&timeout, "timeout", "T", 60, "Timeout in seconds")
-	rootCmd.Flags().IntVarP(&wait, "wait", "W", 3, "Wait time in seconds after page load")
+	rootCmd.Flags().IntVarP(&wait, "wait", "W", 3000, "Wait time in milliseconds after page load")
 	rootCmd.Flags().VarP(&userAgent, "user-agent", "A", "Set User-Agent header")
 	rootCmd.Flags().VarP(&headers, "header", "H", "Add custom headers (format: 'Key: Value') or filename containing headers")
 	rootCmd.Flags().VarP(&cookies, "cookie", "C", "Add cookies (format: 'name=value' or 'name=value; domain=example.com') or filename containing cookies")
@@ -415,7 +415,7 @@ func processURL(url string) {
 	logger.Progress("Navigating to %s...", url)
 	tasks := []chromedp.Action{
 		chromedp.Navigate(url),
-		chromedp.Sleep(time.Duration(wait) * time.Second),
+		chromedp.Sleep(time.Duration(wait) * time.Millisecond),
 	}
 	if err = chromedp.Run(ctx, tasks...); err != nil {
 		if strings.Contains(err.Error(), "ERR_HTTP_RESPONSE_CODE_FAILURE") {

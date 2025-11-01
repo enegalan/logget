@@ -89,8 +89,8 @@ logget --logs --output data.txt --output-dir logs --append https://example.com
 # Set custom timeout
 logget --logs --timeout 60 https://example.com
 
-# Set custom wait time after page load
-logget --logs --wait 5 https://example.com
+# Set custom wait time after page load (in milliseconds)
+logget --logs --wait 5000 https://example.com
 
 # Add custom headers
 logget --logs --header "Authorization: Bearer token" --header "X-Custom: value" https://example.com
@@ -186,7 +186,7 @@ logget --network --domain "(.*\\.)?example\\.com$" https://example.com
 - `--append`, `-a`: Append to file instead of overwriting
 - `--output-dir`: Directory to save files in (creates directories automatically)
 - `--timeout`, `-T`: Set timeout in seconds (default: 60)
-- `--wait`, `-W`: Wait time in seconds after page load (default: 3)
+- `--wait`, `-W`: Wait time in milliseconds after page load (default: 3000)
 - `--user-agent`, `-A`: Set User-Agent header (default: "logget/1.0")
 - `--header`, `-H`: Add custom HTTP headers (format: 'Key: Value')
 - `--cookie`, `-C`: Set cookies (format: 'name=value' or 'name=value; domain=example.com')
