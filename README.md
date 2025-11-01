@@ -7,13 +7,12 @@ A command-line tool similar to `curl` that extracts browser logs and network dat
 - **Console Log Collection**: Capture all console.log, console.error, console.warn, and console.info messages
 - **Network Monitoring**: Track all HTTP requests (fetch, XMLHttpRequest) with headers, status codes, and timing
 - **Cross-Platform**: Works on Windows, Linux, and macOS
-- **No Chrome Required**: Uses embedded Chromium via `go-rod`
+- **No Chrome Required**: Uses embedded Chromium via `chromedp`
 - **JSON Output**: Structured data output for easy parsing
 - **File Output**: Write results to files instead of stdout
 - **Append Mode**: Add output to existing files instead of overwriting
-- **Directory Organization**: Save files to specific directories with automatic directory creation
-- **Custom Headers**: Add custom HTTP headers like curl
-- **Cookie Support**: Set cookies for authenticated requests
+- **Custom Headers**: Add custom HTTP headers like curl (supports files)
+- **Cookie Support**: Set cookies for authenticated requests (supports files)
 - **Configurable Timeout**: Set custom timeout values
 
 ## Installation
@@ -77,15 +76,6 @@ logget --logs --output results.txt --append https://example.com
 # Append JSON output to a file
 logget --logs --json --output results.json --append https://example.com
 
-# Save files to a specific directory
-logget --logs --output results.txt --output-dir /tmp/logs https://example.com
-
-# Create nested directories automatically
-logget --logs --output data.txt --output-dir results/2024/october https://example.com
-
-# Append to files in a specific directory
-logget --logs --output data.txt --output-dir logs --append https://example.com
-
 # Set custom timeout
 logget --logs --timeout 60 https://example.com
 
@@ -95,11 +85,20 @@ logget --logs --wait 5000 https://example.com
 # Add custom headers
 logget --logs --header "Authorization: Bearer token" --header "X-Custom: value" https://example.com
 
+# Add headers from a file
+logget --logs --header headers.txt https://example.com
+
 # Set cookies for authenticated requests
 logget --logs --cookie "session_id=abc123" --cookie "user_token=xyz789" https://example.com
 
+# Set cookies from a file
+logget --logs --cookie cookies.txt https://example.com
+
 # Set cookies with additional attributes
 logget --logs --cookie "session_id=abc123; domain=.example.com; secure" --cookie "user_pref=dark_mode; path=/settings" https://example.com
+
+# Mix direct values and files
+logget --logs --header "Authorization: Bearer token" --header headers.txt --cookie "session_id=abc123" --cookie cookies.txt https://example.com
 ```
 
 ### Real-time Streaming Examples
@@ -182,22 +181,21 @@ logget --network --domain "(.*\\.)?example\\.com$" https://example.com
 - `--json`, `-J`: Output results in JSON format
 - `--csv`: Output results in CSV format
 - `--no-color`: Disable colored output
-- `--output`, `-o`: Write to file instead of stdout
+- `--output`, `-o` `<filename>`: Write to file instead of stdout
 - `--append`, `-a`: Append to file instead of overwriting
-- `--output-dir`: Directory to save files in (creates directories automatically)
 - `--timeout`, `-T`: Set timeout in seconds (default: 60)
 - `--wait`, `-W`: Wait time in milliseconds after page load (default: 3000)
-- `--user-agent`, `-A`: Set User-Agent header (default: "logget/1.0")
-- `--header`, `-H`: Add custom HTTP headers (format: 'Key: Value')
-- `--cookie`, `-C`: Set cookies (format: 'name=value' or 'name=value; domain=example.com')
+- `--user-agent`, `-A` `<name>`: Set User-Agent header (default: "logget/1.0")
+- `--header`, `-H` `<header|file>`: Add custom HTTP headers (format: 'Key: Value') or filename containing headers
+- `--cookie`, `-C` `<data|filename>`: Set cookies (format: 'name=value' or 'name=value; domain=example.com') or filename containing cookies
 - `--verbose`, `-V`: Show detailed HTTP protocol information
 - `--version`, `-v`: Show version information
 - `--follow`, `-f`: Stream logs and network requests in real-time
-- `--filter`: Show only logs/requests matching this regex pattern
-- `--exclude`: Exclude logs/requests matching this regex pattern
-- `--status`: Only include requests whose HTTP status code matches this regex
-- `--domain`: Only include requests whose domain matches this regex
-- `--mime`: Only include requests whose MIME type matches this regex
+- `--filter` `<regex>`: Show only logs/requests matching this regex pattern
+- `--exclude` `<regex>`: Exclude logs/requests matching this regex pattern
+- `--status` `<regex>`: Only include requests whose HTTP status code matches this regex
+- `--domain` `<regex>`: Only include requests whose domain matches this regex
+- `--mime` `<regex>`: Only include requests whose MIME type matches this regex
 - `--refresh`: Refresh interval in milliseconds for real-time streaming (default: 100)
 - `--insecure`, `-k`: Skip SSL certificate verification (useful for self-signed certificates)
 - `--xhr`: Only include fetch/XHR requests
@@ -210,9 +208,9 @@ logget --network --domain "(.*\\.)?example\\.com$" https://example.com
 - `--manifest`: Only include Manifest requests
 - `--socket`: Only include WebSocket requests
 
-### File Output and Directory Organization
+### File Output
 
-The `--output`, `--output-dir`, and `--append` flags allow you to save results to files instead of displaying them on stdout:
+The `--output` and `--append` flags allow you to save results to files instead of displaying them on stdout:
 
 ```bash
 # Save to a specific file (overwrites existing file)
@@ -221,27 +219,41 @@ logget https://example.com --logs --output results.txt
 # Append to an existing file (creates file if it doesn't exist)
 logget https://example.com --logs --output results.txt --append
 
-# Save to a directory (creates the directory if it doesn't exist)
-logget https://example.com --logs --output results.txt --output-dir /tmp/logs
-
-# Create nested directory structure automatically
-logget https://example.com --logs --output data.txt --output-dir logs/2024/october/27
-
-# Append to files in a specific directory
-logget https://example.com --logs --output data.txt --output-dir logs --append
-
 # Works with JSON output too
-logget https://example.com --logs --json --output data.json --output-dir results
+logget https://example.com --logs --json --output data.json
 
 # Append JSON output to existing file
 logget https://example.com --logs --json --output data.json --append
 ```
 
 **Key Features:**
-- **Automatic Directory Creation**: Creates directories and subdirectories as needed
-- **Cross-Platform Paths**: Uses proper path separators for your operating system
 - **Error Handling**: Shows clear error messages if file creation fails
 - **Confirmation**: Displays the full path where the file was saved or appended
+
+### File-Based Input
+
+Both `--header` and `--cookie` flags support reading from files in addition to direct values:
+
+**Header File Format:**
+```
+Authorization: Bearer token123
+X-Custom-Header: value
+Content-Type: application/json
+# Comments (lines starting with # are ignored)
+```
+
+**Cookie File Format:**
+```
+session_id=abc123
+user_token=xyz789
+pref=dark_mode; domain=example.com
+# Comments (lines starting with # are ignored)
+```
+
+The tools automatically detect whether the argument is a file path or a direct value:
+- If it contains `:` (for headers) or `=` (for cookies), it's treated as direct data
+- Otherwise, it attempts to read from the file
+- You can mix direct values and files in the same command
 
 ## Output Schemas
 
