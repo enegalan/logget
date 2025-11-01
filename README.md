@@ -99,6 +99,10 @@ logget --logs --cookie "session_id=abc123; domain=.example.com; secure" --cookie
 
 # Mix direct values and files
 logget --logs --header "Authorization: Bearer token" --header headers.txt --cookie "session_id=abc123" --cookie cookies.txt https://example.com
+
+# Suppress progress messages, only show data
+logget --quiet --logs --network https://example.com
+logget -q --logs --json https://example.com
 ```
 
 ### Real-time Streaming Examples
@@ -141,10 +145,6 @@ logget -f --logs --filter "ERROR|WARN" --json --output errors.json https://examp
 logget -k --logs https://0.0.0.0:3030
 logget -k --network https://localhost:8080
 logget -k -f --logs --filter "ERROR" https://127.0.0.1:3000
-
-# Suppress progress messages, only show data
-logget --quiet --logs --network https://example.com
-logget -q --logs --json https://example.com
 ```
 
 ### Request Type Filtering Examples
@@ -185,7 +185,7 @@ logget --network --domain "(.*\\.)?example\\.com$" https://example.com
 - `--json`, `-J`: Output results in JSON format
 - `--csv`: Output results in CSV format
 - `--no-color`: Disable colored output
-- `--quiet`, `-q`: Suppress progress messages, only show data
+- `--quiet`, `-q`: Suppress progress messages, only show data (errors and warnings still displayed)
 - `--output`, `-o` `<filename>`: Write to file instead of stdout
 - `--append`, `-a`: Append to file instead of overwriting
 - `--timeout`, `-T`: Set timeout in seconds (default: 60)
@@ -229,11 +229,10 @@ logget https://example.com --logs --json --output data.json
 
 # Append JSON output to existing file
 logget https://example.com --logs --json --output data.json --append
-```
 
-**Key Features:**
-- **Error Handling**: Shows clear error messages if file creation fails
-- **Confirmation**: Displays the full path where the file was saved or appended
+# Quiet mode: save without confirmation messages
+logget -q --logs --output results.txt https://example.com
+```
 
 ### File-Based Input
 
