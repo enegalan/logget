@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	helpers "logget/helpers"
+	"logget/helpers/flags"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -41,7 +42,7 @@ var (
 	wait             int
 	userAgent        string
 	headers          []string
-	cookies          []string
+	cookies          flags.CookieArray
 	versionFlag      bool
 	verbose          bool
 	outputFile       string
@@ -93,7 +94,7 @@ func main() {
 	rootCmd.Flags().IntVarP(&wait, "wait", "W", 3, "Wait time in seconds after page load")
 	rootCmd.Flags().StringVarP(&userAgent, "user-agent", "A", "logget/1.0", "Set User-Agent header")
 	rootCmd.Flags().StringArrayVarP(&headers, "header", "H", []string{}, "Add custom headers (format: 'Key: Value')")
-	rootCmd.Flags().StringArrayVarP(&cookies, "cookie", "C", []string{}, "Add cookies (format: 'name=value' or 'name=value; domain=example.com')")
+	rootCmd.Flags().VarP(&cookies, "cookie", "C", "Add cookies (format: 'name=value' or 'name=value; domain=example.com') or filename containing cookies")
 	rootCmd.Flags().StringVarP(&outputFile, "output", "o", "", "Write to file instead of stdout")
 	rootCmd.Flags().StringVar(&outputDir, "output-dir", "", "Directory to save files in")
 	rootCmd.Flags().BoolVarP(&appendMode, "append", "a", false, "Append to file instead of overwriting")
@@ -143,7 +144,7 @@ func processURL(url string) {
 	cfg := helpers.Config{
 		UserAgent:      userAgent,
 		Headers:        headers,
-		Cookies:        cookies,
+		Cookies:        []string(cookies),
 		OutputFile:     outputFile,
 		OutputDir:      outputDir,
 		AppendMode:     appendMode,
@@ -283,7 +284,7 @@ func processURL(url string) {
 	// Set cookies if provided
 	if len(cookies) > 0 {
 		logger.Progress("Setting cookies...")
-		if err := helpers.SetCookies(ctx, url, cookies); err != nil {
+		if err := helpers.SetCookies(ctx, url, []string(cookies)); err != nil {
 			logger.Fatal("Failed to set cookies: %v", err)
 		}
 	}
