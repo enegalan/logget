@@ -14,6 +14,7 @@ A command-line tool similar to `curl` that extracts browser logs and network dat
 - **Custom Headers**: Add custom HTTP headers like curl (supports files)
 - **Cookie Support**: Set cookies for authenticated requests (supports files)
 - **Configurable Timeout**: Set custom timeout values
+- **Fingerprint Rotation**: Rotate navigator fingerprints (userAgent, platform, language, screen properties, WebGL, Canvas) to prevent tracking
 
 ## Installation
 
@@ -187,6 +188,22 @@ logget --network --max-size 10240 https://example.com
 logget --network --min-size 1024 --max-size 102400 https://example.com
 ```
 
+### Fingerprint Rotation Examples
+
+```bash
+# Fingerprint rotation is enabled by default (every 5 seconds)
+logget --network https://example.com
+
+# Rotate fingerprints every 2 seconds
+logget --fingerprint-interval 2000 --network https://example.com
+
+# Rotate fingerprints with custom interval and stream to file
+logget --fingerprint-interval 3000 -f --logs --output fingerprint.log https://example.com
+
+# Disable fingerprint rotation (if needed)
+logget --no-rotate-fingerprints --network https://example.com
+```
+
 ### Options
 
 - `--logs`, `-L`: Capture and display console logs
@@ -223,6 +240,8 @@ logget --network --min-size 1024 --max-size 102400 https://example.com
 - `--media`: Only include Media requests
 - `--manifest`: Only include Manifest requests
 - `--socket`: Only include WebSocket requests
+- `--no-rotate-fingerprints`: Disable fingerprint rotation (default: enabled)
+- `--fingerprint-interval`: Interval in milliseconds for fingerprint rotation (default: 5000)
 
 ### File Output
 

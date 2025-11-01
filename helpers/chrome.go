@@ -349,6 +349,11 @@ func StreamLogsRealTime(cfg Config, ctx context.Context, url string, onLog func(
 	if err := chromedp.Run(ctx, chromedp.Navigate(url)); err != nil {
 		return fmt.Errorf("failed to navigate to %s: %v", url, err)
 	}
+	if cfg.RotateFingerprints {
+		if err := StartFingerprintRotation(ctx, cfg.FingerprintInterval); err != nil {
+			return fmt.Errorf("failed to start fingerprint rotation: %v", err)
+		}
+	}
 	<-ctx.Done()
 	return nil
 }

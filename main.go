@@ -61,7 +61,9 @@ var (
 	mimePattern     flags.RegexPattern
 	refreshInterval int
 
-	skipSSLVerify bool
+	skipSSLVerify        bool
+	noRotateFingerprints bool
+	fingerprintInterval  int
 
 	logger        *helpers.Logger
 	formatter     *helpers.OutputFormatter
@@ -124,6 +126,8 @@ func main() {
 	rootCmd.Flags().VarP(&minSize, "min-size", "", "Only include requests whose size is at least this many bytes")
 	rootCmd.Flags().VarP(&maxSize, "max-size", "", "Only include requests whose size is at most this many bytes")
 	rootCmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress progress messages, only show data")
+	rootCmd.Flags().BoolVar(&noRotateFingerprints, "no-rotate-fingerprints", false, "Disable fingerprint rotation (default: enabled)")
+	rootCmd.Flags().IntVar(&fingerprintInterval, "fingerprint-interval", 5000, "Interval in milliseconds for fingerprint rotation")
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -148,33 +152,37 @@ func runLogget(cmd *cobra.Command, args []string) {
 }
 
 func processURL(url string) {
+	// Fingerprint rotation is enabled by default unless explicitly disabled
+	finalRotateFingerprints := !noRotateFingerprints
 	cfg := helpers.Config{
-		UserAgent:      userAgent.Get(),
-		Headers:        []string(headers),
-		Cookies:        []string(cookies),
-		OutputFile:     outputFile.Get(),
-		AppendMode:     appendMode,
-		FollowMode:     followMode,
-		SkipSSLVerify:  skipSSLVerify,
-		ShowNetwork:    showNetwork,
-		ShowLogs:       showLogs,
-		JSONOutput:     jsonOutput,
-		FilterPattern:  filterPattern.Get(),
-		ExcludePattern: excludePattern.Get(),
-		StatusPattern:  statusPattern.Get(),
-		DomainPattern:  domainPattern.Get(),
-		MimePattern:    mimePattern.Get(),
-		XHROnly:        xhrOnly,
-		DocumentOnly:   documentOnly,
-		CssOnly:        cssOnly,
-		ScriptOnly:     scriptOnly,
-		FontOnly:       fontOnly,
-		ImgOnly:        imgOnly,
-		MediaOnly:      mediaOnly,
-		ManifestOnly:   manifestOnly,
-		WebSocketOnly:  websocketOnly,
-		MinSize:        minSize.Get(),
-		MaxSize:        maxSize.Get(),
+		UserAgent:           userAgent.Get(),
+		Headers:             []string(headers),
+		Cookies:             []string(cookies),
+		OutputFile:          outputFile.Get(),
+		AppendMode:          appendMode,
+		FollowMode:          followMode,
+		SkipSSLVerify:       skipSSLVerify,
+		ShowNetwork:         showNetwork,
+		ShowLogs:            showLogs,
+		JSONOutput:          jsonOutput,
+		FilterPattern:       filterPattern.Get(),
+		ExcludePattern:      excludePattern.Get(),
+		StatusPattern:       statusPattern.Get(),
+		DomainPattern:       domainPattern.Get(),
+		MimePattern:         mimePattern.Get(),
+		XHROnly:             xhrOnly,
+		DocumentOnly:        documentOnly,
+		CssOnly:             cssOnly,
+		ScriptOnly:          scriptOnly,
+		FontOnly:            fontOnly,
+		ImgOnly:             imgOnly,
+		MediaOnly:           mediaOnly,
+		ManifestOnly:        manifestOnly,
+		WebSocketOnly:       websocketOnly,
+		MinSize:             minSize.Get(),
+		MaxSize:             maxSize.Get(),
+		RotateFingerprints:  finalRotateFingerprints,
+		FingerprintInterval: fingerprintInterval,
 	}
 	// Quick check: if no data collection flags are specified, show help immediately
 	if !showLogs && !showNetwork && !verbose && !jsonOutput && !followMode {
@@ -507,6 +515,11 @@ func processURL(url string) {
 			logger.Fatal("Navigation failed: %v", err)
 		} else {
 			logger.Fatal("Failed to navigate to %s: %v", url, err)
+		}
+	}
+	if cfg.RotateFingerprints {
+		if err := helpers.StartFingerprintRotation(ctx, cfg.FingerprintInterval); err != nil {
+			logger.Warn("Failed to start fingerprint rotation: %v", err)
 		}
 	}
 	logger.Success("Successfully loaded page: %s", url)
