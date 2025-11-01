@@ -53,11 +53,11 @@ var (
 	responseCaptured bool
 
 	followMode      bool
-	filterPattern   string
-	excludePattern  string
-	statusPattern   string
-	domainPattern   string
-	mimePattern     string
+	filterPattern   flags.RegexPattern
+	excludePattern  flags.RegexPattern
+	statusPattern   flags.RegexPattern
+	domainPattern   flags.RegexPattern
+	mimePattern     flags.RegexPattern
 	refreshInterval int
 
 	skipSSLVerify bool
@@ -101,11 +101,11 @@ func main() {
 	rootCmd.Flags().BoolVarP(&versionFlag, "version", "v", false, "Show version information")
 	rootCmd.Flags().BoolVarP(&verbose, "verbose", "V", false, "Show detailed HTTP protocol information")
 	rootCmd.Flags().BoolVarP(&followMode, "follow", "f", false, "Stream logs and network requests in real-time")
-	rootCmd.Flags().StringVar(&filterPattern, "filter", "", "Show only logs/requests matching this regex pattern")
-	rootCmd.Flags().StringVar(&excludePattern, "exclude", "", "Exclude logs/requests matching this regex pattern")
-	rootCmd.Flags().StringVar(&statusPattern, "status", "", "Only include requests whose HTTP status code matches this regex pattern")
-	rootCmd.Flags().StringVar(&domainPattern, "domain", "", "Only include requests whose domain matches this regex pattern")
-	rootCmd.Flags().StringVar(&mimePattern, "mime", "", "Only include requests whose MIME type matches this regex pattern")
+	rootCmd.Flags().VarP(&filterPattern, "filter", "", "Show only logs/requests matching this regex pattern")
+	rootCmd.Flags().VarP(&excludePattern, "exclude", "", "Exclude logs/requests matching this regex pattern")
+	rootCmd.Flags().VarP(&statusPattern, "status", "", "Only include requests whose HTTP status code matches this regex pattern")
+	rootCmd.Flags().VarP(&domainPattern, "domain", "", "Only include requests whose domain matches this regex pattern")
+	rootCmd.Flags().VarP(&mimePattern, "mime", "", "Only include requests whose MIME type matches this regex pattern")
 	rootCmd.Flags().IntVar(&refreshInterval, "refresh", 100, "Refresh interval in milliseconds for real-time streaming")
 	rootCmd.Flags().BoolVarP(&skipSSLVerify, "insecure", "k", false, "Skip SSL certificate verification (useful for self-signed certificates)")
 	rootCmd.Flags().BoolVar(&noColor, "no-color", false, "Disable colored output")
@@ -153,11 +153,11 @@ func processURL(url string) {
 		ShowNetwork:    showNetwork,
 		ShowLogs:       showLogs,
 		JSONOutput:     jsonOutput,
-		FilterPattern:  filterPattern,
-		ExcludePattern: excludePattern,
-		StatusPattern:  statusPattern,
-		DomainPattern:  domainPattern,
-		MimePattern:    mimePattern,
+		FilterPattern:  filterPattern.Get(),
+		ExcludePattern: excludePattern.Get(),
+		StatusPattern:  statusPattern.Get(),
+		DomainPattern:  domainPattern.Get(),
+		MimePattern:    mimePattern.Get(),
 		XHROnly:        xhrOnly,
 		DocumentOnly:   documentOnly,
 		CssOnly:        cssOnly,
@@ -321,13 +321,13 @@ func processURL(url string) {
 			logger.Progress("Streaming logs from %s (Press Ctrl+C to stop)", url)
 		}
 		var filterRegex, excludeRegex *regexp.Regexp
-		if filterPattern != "" {
-			if r, err := regexp.Compile(filterPattern); err == nil {
+		if !filterPattern.Empty() {
+			if r, err := regexp.Compile(filterPattern.Get()); err == nil {
 				filterRegex = r
 			}
 		}
-		if excludePattern != "" {
-			if r, err := regexp.Compile(excludePattern); err == nil {
+		if !excludePattern.Empty() {
+			if r, err := regexp.Compile(excludePattern.Get()); err == nil {
 				excludeRegex = r
 			}
 		}
