@@ -36,6 +36,7 @@ func (l LogLevel) String() string {
 
 type Logger struct {
 	verbose bool
+	quiet   bool
 	theme   *ColorTheme
 }
 
@@ -48,8 +49,13 @@ func NewLogger(verbose bool, colors bool) *Logger {
 	}
 	return &Logger{
 		verbose: verbose,
+		quiet:   false,
 		theme:   theme,
 	}
+}
+
+func (l *Logger) SetQuiet(quiet bool) {
+	l.quiet = quiet
 }
 
 func (l *Logger) formatMessage(level LogLevel, format string, args ...interface{}) string {
@@ -68,7 +74,9 @@ func (l *Logger) Debug(format string, args ...interface{}) {
 }
 
 func (l *Logger) Info(format string, args ...interface{}) {
-	fmt.Fprintln(os.Stderr, l.formatMessage(INFO, format, args...))
+	if !l.quiet {
+		fmt.Fprintln(os.Stderr, l.formatMessage(INFO, format, args...))
+	}
 }
 
 func (l *Logger) Warn(format string, args ...interface{}) {
@@ -85,29 +93,37 @@ func (l *Logger) Fatal(format string, args ...interface{}) {
 }
 
 func (l *Logger) Success(format string, args ...interface{}) {
-	timestamp := time.Now().Format("15:04:05")
-	message := fmt.Sprintf(format, args...)
-	formattedTimestamp := l.theme.FormatTimestamp(timestamp)
-	formattedMessage := l.theme.FormatSuccess(message)
-	fmt.Fprintf(os.Stderr, "[%s] %s\n", formattedTimestamp, formattedMessage)
+	if !l.quiet {
+		timestamp := time.Now().Format("15:04:05")
+		message := fmt.Sprintf(format, args...)
+		formattedTimestamp := l.theme.FormatTimestamp(timestamp)
+		formattedMessage := l.theme.FormatSuccess(message)
+		fmt.Fprintf(os.Stderr, "[%s] %s\n", formattedTimestamp, formattedMessage)
+	}
 }
 
 func (l *Logger) Progress(format string, args ...interface{}) {
-	timestamp := time.Now().Format("15:04:05")
-	message := fmt.Sprintf(format, args...)
-	formattedTimestamp := l.theme.FormatTimestamp(timestamp)
-	formattedMessage := l.theme.FormatProgress(message)
-	fmt.Fprintf(os.Stderr, "[%s] %s\n", formattedTimestamp, formattedMessage)
+	if !l.quiet {
+		timestamp := time.Now().Format("15:04:05")
+		message := fmt.Sprintf(format, args...)
+		formattedTimestamp := l.theme.FormatTimestamp(timestamp)
+		formattedMessage := l.theme.FormatProgress(message)
+		fmt.Fprintf(os.Stderr, "[%s] %s\n", formattedTimestamp, formattedMessage)
+	}
 }
 
 func (l *Logger) Section(title string) {
-	formattedTitle := l.theme.FormatHeader(title)
-	fmt.Fprintf(os.Stderr, "\n=== %s ===\n", formattedTitle)
+	if !l.quiet {
+		formattedTitle := l.theme.FormatHeader(title)
+		fmt.Fprintf(os.Stderr, "\n=== %s ===\n", formattedTitle)
+	}
 }
 
 func (l *Logger) Separator() {
-	separator := l.theme.FormatSeparator("─", 60)
-	fmt.Fprintf(os.Stderr, "%s\n", separator)
+	if !l.quiet {
+		separator := l.theme.FormatSeparator("─", 60)
+		fmt.Fprintf(os.Stderr, "%s\n", separator)
+	}
 }
 
 func (l *Logger) PrintHeader(version string) {

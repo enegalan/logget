@@ -141,6 +141,10 @@ logget -f --logs --filter "ERROR|WARN" --json --output errors.json https://examp
 logget -k --logs https://0.0.0.0:3030
 logget -k --network https://localhost:8080
 logget -k -f --logs --filter "ERROR" https://127.0.0.1:3000
+
+# Suppress progress messages, only show data
+logget --quiet --logs --network https://example.com
+logget -q --logs --json https://example.com
 ```
 
 ### Request Type Filtering Examples
@@ -181,6 +185,7 @@ logget --network --domain "(.*\\.)?example\\.com$" https://example.com
 - `--json`, `-J`: Output results in JSON format
 - `--csv`: Output results in CSV format
 - `--no-color`: Disable colored output
+- `--quiet`, `-q`: Suppress progress messages, only show data
 - `--output`, `-o` `<filename>`: Write to file instead of stdout
 - `--append`, `-a`: Append to file instead of overwriting
 - `--timeout`, `-T`: Set timeout in seconds (default: 60)

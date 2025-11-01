@@ -75,6 +75,7 @@ var (
 	manifestOnly  bool
 	websocketOnly bool
 	noColor       bool
+	quiet         bool
 )
 
 func main() {
@@ -118,6 +119,7 @@ func main() {
 	rootCmd.Flags().BoolVar(&mediaOnly, "media", false, "Only include Media requests")
 	rootCmd.Flags().BoolVar(&manifestOnly, "manifest", false, "Only include Manifest requests")
 	rootCmd.Flags().BoolVar(&websocketOnly, "socket", false, "Only include WebSocket requests")
+	rootCmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress progress messages, only show data")
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -126,6 +128,7 @@ func main() {
 
 func runLogget(cmd *cobra.Command, args []string) {
 	logger = helpers.NewLogger(verbose, !noColor)
+	logger.SetQuiet(quiet)
 	formatter = helpers.NewOutputFormatter(!noColor)
 	if versionFlag {
 		logger.PrintHeader(version)
