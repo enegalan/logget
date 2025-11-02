@@ -13,14 +13,8 @@ type OutputFormatter struct {
 }
 
 func NewOutputFormatter(colors bool) *OutputFormatter {
-	var theme *ColorTheme
-	if colors {
-		theme = DefaultTheme()
-	} else {
-		theme = DisabledTheme()
-	}
 	return &OutputFormatter{
-		theme: theme,
+		theme: GetTheme(colors),
 	}
 }
 
@@ -316,29 +310,39 @@ func (f *OutputFormatter) FormatNetworkCSV(entries []NetworkEntry, includeHeader
 }
 
 func (f *OutputFormatter) FormatAndOutputLogCSVRow(le LogEntry, cfg Config, includeHeader bool) error {
+	csvData := f.formatLogCSVRow(le, includeHeader)
+	if csvData == "" {
+		return nil
+	}
+	return WriteOutput(cfg, csvData)
+}
+
+func (f *OutputFormatter) formatLogCSVRow(le LogEntry, includeHeader bool) string {
 	var buf bytes.Buffer
 	w := csv.NewWriter(&buf)
 	if includeHeader {
-		if err := w.Write([]string{"timestamp", "level", "source", "message"}); err != nil {
-			return fmt.Errorf("failed to write CSV header: %v", err)
-		}
+		_ = w.Write([]string{"timestamp", "level", "source", "message"})
 	}
-	if err := w.Write([]string{le.Time.Format(time.RFC3339), strings.ToUpper(le.Level), le.Source, le.Message}); err != nil {
-		return fmt.Errorf("failed to write CSV row: %v", err)
-	}
+	_ = w.Write([]string{le.Time.Format(time.RFC3339), strings.ToUpper(le.Level), le.Source, le.Message})
 	w.Flush()
-	return WriteOutput(cfg, buf.String())
+	return buf.String()
 }
 
 func (f *OutputFormatter) FormatAndOutputNetworkCSVRow(ne NetworkEntry, cfg Config, includeHeader bool) error {
+	csvData := f.formatNetworkCSVRow(ne, includeHeader)
+	if csvData == "" {
+		return nil
+	}
+	return WriteOutput(cfg, csvData)
+}
+
+func (f *OutputFormatter) formatNetworkCSVRow(ne NetworkEntry, includeHeader bool) string {
 	var buf bytes.Buffer
 	w := csv.NewWriter(&buf)
 	if includeHeader {
-		if err := w.Write([]string{"timestamp", "method", "url", "status", "resourceType", "mimeType", "size", "duration", "ttfb", "connectTime", "dnsTime", "sslTime", "sendTime", "waitTime", "receiveTime", "error", "errorType"}); err != nil {
-			return fmt.Errorf("failed to write CSV header: %v", err)
-		}
+		_ = w.Write([]string{"timestamp", "method", "url", "status", "resourceType", "mimeType", "size", "duration", "ttfb", "connectTime", "dnsTime", "sslTime", "sendTime", "waitTime", "receiveTime", "error", "errorType"})
 	}
-	if err := w.Write([]string{
+	_ = w.Write([]string{
 		ne.Timestamp.Format(time.RFC3339),
 		ne.Method,
 		ne.URL,
@@ -356,9 +360,7 @@ func (f *OutputFormatter) FormatAndOutputNetworkCSVRow(ne NetworkEntry, cfg Conf
 		fmt.Sprintf("%.2f", ne.ReceiveTime),
 		ne.Error,
 		ne.ErrorType,
-	}); err != nil {
-		return fmt.Errorf("failed to write CSV row: %v", err)
-	}
+	})
 	w.Flush()
-	return WriteOutput(cfg, buf.String())
+	return buf.String()
 }

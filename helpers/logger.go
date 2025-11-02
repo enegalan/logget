@@ -41,16 +41,10 @@ type Logger struct {
 }
 
 func NewLogger(verbose bool, colors bool) *Logger {
-	var theme *ColorTheme
-	if colors {
-		theme = DefaultTheme()
-	} else {
-		theme = DisabledTheme()
-	}
 	return &Logger{
 		verbose: verbose,
 		quiet:   false,
-		theme:   theme,
+		theme:   GetTheme(colors),
 	}
 }
 

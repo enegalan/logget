@@ -1,9 +1,7 @@
 package flags
 
 import (
-	"bufio"
-	"fmt"
-	"os"
+	"logget/helpers"
 	"strings"
 )
 
@@ -14,46 +12,17 @@ func (h *HeaderArray) String() string {
 }
 
 func (h *HeaderArray) Set(value string) error {
-	// Check if the value contains ':' - if so, treat it as direct header data
-	if strings.Contains(value, ":") {
-		*h = append(*h, value)
-		return nil
-	}
-	// Otherwise, try to read it as a filename
-	fileInfo, err := os.Stat(value)
+	lines, _, err := helpers.TryReadAsFile(
+		value,
+		":",
+		func(val string) bool { return strings.Contains(val, ":") || val != "" },
+		func(line string) bool { return strings.Contains(line, ":") },
+		func(line string) string { return line },
+	)
 	if err != nil {
-		// If file doesn't exist, treat as header data even without ':'
-		*h = append(*h, value)
-		return nil
+		return err
 	}
-	// If it's not a regular file, treat as header data
-	if fileInfo.IsDir() {
-		*h = append(*h, value)
-		return nil
-	}
-	// Read the file and parse headers
-	file, err := os.Open(value)
-	if err != nil {
-		return fmt.Errorf("failed to open header file %s: %v", value, err)
-	}
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	lineNum := 0
-	for scanner.Scan() {
-		lineNum++
-		line := strings.TrimSpace(scanner.Text())
-		// Skip empty lines and comments (lines starting with #)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		// Header format: Key: Value
-		if strings.Contains(line, ":") {
-			*h = append(*h, line)
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("error reading header file %s at line %d: %v", value, lineNum, err)
-	}
+	*h = append(*h, lines...)
 	return nil
 }
 

@@ -16,6 +16,43 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
+func GetChromeOptions(skipSSLVerify bool) []chromedp.ExecAllocatorOption {
+	opts := append(chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.Flag("headless", true),
+		chromedp.Flag("disable-gpu", true),
+		chromedp.Flag("disable-dev-shm-usage", true),
+		chromedp.Flag("no-sandbox", true),
+		chromedp.Flag("disable-extensions", true),
+		chromedp.Flag("disable-plugins", true),
+		chromedp.Flag("disable-web-security", true),
+		chromedp.Flag("disable-features", "VizDisplayCompositor"),
+		chromedp.Flag("ignore-certificate-errors", true),
+		chromedp.Flag("ignore-ssl-errors", true),
+		chromedp.Flag("allow-running-insecure-content", true),
+		chromedp.Flag("disable-certificate-verification", true),
+	)
+	if skipSSLVerify {
+		opts = append(opts,
+			chromedp.Flag("ignore-certificate-errors-spki-list", true),
+			chromedp.Flag("ignore-ssl-errors", true),
+			chromedp.Flag("ignore-certificate-errors", true),
+		)
+	}
+	return opts
+}
+
+func ConvertEventHeaders(headersMap map[string]interface{}) map[string]string {
+	headers := make(map[string]string)
+	for name, value := range headersMap {
+		if str, ok := value.(string); ok {
+			headers[name] = str
+		} else {
+			headers[name] = fmt.Sprintf("%v", value)
+		}
+	}
+	return headers
+}
+
 type LogEntry struct {
 	Level   string    `json:"level"`
 	Message string    `json:"message"`
@@ -358,52 +395,148 @@ func BuildNetworkEntryFromErrorEvent(ev *cdpnetwork.EventLoadingFailed, requestM
 }
 
 func HandleLoadingFailedEvent(ev *cdpnetwork.EventLoadingFailed, requestMethods *sync.Map, requestURLs *sync.Map) *NetworkEntry {
-	var method string
-	var requestURL string
-	if methodVal, ok := requestMethods.Load(ev.RequestID.String()); ok {
-		if methodStr, ok := methodVal.(string); ok {
-			method = methodStr
-		}
-	}
-	if urlVal, ok := requestURLs.Load(ev.RequestID.String()); ok {
-		if urlStr, ok := urlVal.(string); ok {
-			requestURL = urlStr
-		}
-	}
-	if requestURL == "" {
+	requestID := ev.RequestID.String()
+	method, _ := LoadStringFromSyncMap(requestMethods, requestID)
+	requestURL, ok := LoadStringFromSyncMap(requestURLs, requestID)
+	if !ok || requestURL == "" {
 		return nil
 	}
 	ne := BuildNetworkEntryFromErrorEvent(ev, method, requestURL)
 	return &ne
 }
 
-func StreamLogsRealTime(cfg Config, ctx context.Context, url string, onLog func(LogEntry), onNet func(NetworkEntry)) error {
-	opts := append(chromedp.DefaultExecAllocatorOptions[:],
-		chromedp.Flag("headless", true),
-		chromedp.Flag("disable-gpu", true),
-		chromedp.Flag("disable-dev-shm-usage", true),
-		chromedp.Flag("no-sandbox", true),
-		chromedp.Flag("disable-extensions", true),
-		chromedp.Flag("disable-plugins", true),
-		chromedp.Flag("disable-web-security", true),
-		chromedp.Flag("disable-features", "VizDisplayCompositor"),
-		chromedp.Flag("ignore-certificate-errors", true),
-		chromedp.Flag("ignore-ssl-errors", true),
-		chromedp.Flag("allow-running-insecure-content", true),
-		chromedp.Flag("disable-certificate-verification", true),
-	)
-	if cfg.SkipSSLVerify {
-		opts = append(opts,
-			chromedp.Flag("ignore-certificate-errors-spki-list", true),
-			chromedp.Flag("ignore-ssl-errors", true),
-			chromedp.Flag("ignore-certificate-errors", true),
-		)
+type EventHandlers struct {
+	OnLog               func(LogEntry)
+	OnNetwork           func(NetworkEntry)
+	OnRequestWillBeSent func(requestID string, method, url string, headers map[string]string, startTime float64)
+}
+
+func ProcessLogEvent(ev interface{}, handlers *EventHandlers) {
+	if handlers == nil || handlers.OnLog == nil {
+		return
 	}
-	allocCtx, cancel := chromedp.NewExecAllocator(ctx, opts...)
-	defer cancel()
-	ctx, cancel = chromedp.NewContext(allocCtx)
-	defer cancel()
-	if cfg.ShowLogs {
+	if ev, ok := ev.(*cdplog.EventEntryAdded); ok {
+		handlers.OnLog(LogEntry{
+			Level:   ev.Entry.Level.String(),
+			Message: ev.Entry.Text,
+			Time:    time.Now(),
+			Source:  "browser",
+		})
+		return
+	}
+	if ev, ok := ev.(*runtime.EventConsoleAPICalled); ok {
+		var message string
+		for _, arg := range ev.Args {
+			if arg.Value != nil {
+				var str string
+				if err := json.Unmarshal(arg.Value, &str); err == nil {
+					message += str + " "
+				} else {
+					message += fmt.Sprintf("%v ", arg.Value)
+				}
+			}
+		}
+		handlers.OnLog(LogEntry{
+			Level:   ev.Type.String(),
+			Message: strings.TrimSpace(message),
+			Time:    time.Now(),
+			Source:  "console",
+		})
+	}
+}
+
+func ProcessNetworkEventRequestWillBeSent(ev *cdpnetwork.EventRequestWillBeSent, requestMethods *sync.Map, requestURLs *sync.Map, requestStartTimes *sync.Map, startTime time.Time, handlers *EventHandlers) {
+	if ev.Request == nil {
+		return
+	}
+	requestID := ev.RequestID.String()
+	requestMethods.Store(requestID, ev.Request.Method)
+	requestURLs.Store(requestID, ev.Request.URL)
+	headers := ConvertEventHeaders(ev.Request.Headers)
+	requestStartTime := float64(time.Since(startTime).Nanoseconds()) / 1e6
+	requestStartTimes.Store(requestID, requestStartTime)
+	if handlers != nil && handlers.OnRequestWillBeSent != nil {
+		handlers.OnRequestWillBeSent(requestID, ev.Request.Method, ev.Request.URL, headers, requestStartTime)
+	}
+}
+
+func ProcessNetworkEventResponseReceived(ev *cdpnetwork.EventResponseReceived, cfg Config, requestMethods *sync.Map, requestStartTimes *sync.Map, startTime time.Time, networkEntriesMap *sync.Map, handlers *EventHandlers) *NetworkEntry {
+	if !ShouldIncludeNetworkEvent(cfg, ev) {
+		return nil
+	}
+	requestID := ev.RequestID.String()
+	method, _ := LoadStringFromSyncMap(requestMethods, requestID)
+	var requestTiming *cdpnetwork.ResourceTiming
+	var requestStartTime, responseTime float64
+	if ev.Response != nil && ev.Response.Timing != nil {
+		requestTiming = ev.Response.Timing
+	}
+	requestStartTime, _ = LoadFloat64FromSyncMap(requestStartTimes, requestID)
+	responseTime = float64(time.Since(startTime).Nanoseconds()) / 1e6
+	ne := BuildNetworkEntryFromEvent(ev, method, requestTiming, responseTime, requestStartTime)
+	if ne.ResponseStartTime > 0 {
+		responseStartTimesMap.Store(ev.RequestID.String(), responseTime)
+	}
+	if handlers != nil && handlers.OnNetwork != nil {
+		handlers.OnNetwork(ne)
+	}
+	if networkEntriesMap != nil {
+		networkEntriesMap.Store(ev.RequestID.String(), ne)
+	}
+	return &ne
+}
+
+func updateEntryContentDownloadTime(entry *NetworkEntry, contentDownloadTime float64) {
+	entry.ContentDownloadTime = contentDownloadTime
+	entry.ContentDownloadTimeFormatted = FormatTiming(entry.ContentDownloadTime)
+	if entry.Duration > 0 && entry.ContentDownloadTime > 0 {
+		entry.Duration = entry.Duration + entry.ContentDownloadTime
+		entry.DurationFormatted = FormatTiming(entry.Duration)
+	}
+	entry.Total = entry.Total + entry.ContentDownloadTime
+	entry.TotalFormatted = FormatTiming(entry.Total)
+}
+
+func ProcessNetworkEventLoadingFinished(ev *cdpnetwork.EventLoadingFinished, networkEntriesMap *sync.Map, startTime time.Time, handlers *EventHandlers) {
+	if entryVal, ok := networkEntriesMap.Load(ev.RequestID.String()); ok {
+		loadingFinishedTime := float64(time.Since(startTime).Nanoseconds()) / 1e6
+		if responseStartTimeVal, ok := responseStartTimesMap.Load(ev.RequestID.String()); ok {
+			if responseStartTime, ok := responseStartTimeVal.(float64); ok {
+				contentDownloadTime := loadingFinishedTime - responseStartTime
+				if entry, ok := entryVal.(NetworkEntry); ok {
+					updateEntryContentDownloadTime(&entry, contentDownloadTime)
+					networkEntriesMap.Store(ev.RequestID.String(), entry)
+					if handlers != nil && handlers.OnNetwork != nil {
+						handlers.OnNetwork(entry)
+					}
+				} else if entryPtr, ok := entryVal.(*NetworkEntry); ok {
+					updateEntryContentDownloadTime(entryPtr, contentDownloadTime)
+				}
+			}
+		}
+	}
+}
+
+func ProcessNetworkEventLoadingFailed(ev *cdpnetwork.EventLoadingFailed, requestMethods *sync.Map, requestURLs *sync.Map, handlers *EventHandlers) {
+	ne := HandleLoadingFailedEvent(ev, requestMethods, requestURLs)
+	if ne != nil && handlers != nil && handlers.OnNetwork != nil {
+		handlers.OnNetwork(*ne)
+	}
+}
+
+func CreateChromeContext(ctx context.Context, skipSSLVerify bool) (context.Context, context.CancelFunc, error) {
+	opts := GetChromeOptions(skipSSLVerify)
+	allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, opts...)
+	chromeCtx, chromeCancel := chromedp.NewContext(allocCtx)
+	cancelFunc := func() {
+		chromeCancel()
+		allocCancel()
+	}
+	return chromeCtx, cancelFunc, nil
+}
+
+func EnableChromeDomains(ctx context.Context, showLogs, showNetwork bool) error {
+	if showLogs {
 		if err := chromedp.Run(ctx, cdplog.Enable()); err != nil {
 			return fmt.Errorf("failed to enable log domain: %v", err)
 		}
@@ -411,132 +544,68 @@ func StreamLogsRealTime(cfg Config, ctx context.Context, url string, onLog func(
 			return fmt.Errorf("failed to enable runtime domain: %v", err)
 		}
 	}
-	if cfg.ShowNetwork {
+	if showNetwork {
 		if err := chromedp.Run(ctx, cdpnetwork.Enable()); err != nil {
 			return fmt.Errorf("failed to enable network domain: %v", err)
 		}
 	}
-	requestMethods := sync.Map{}
-	requestURLs := sync.Map{}
-	requestStartTimes := sync.Map{}
-	networkEntriesMap := sync.Map{}
+	return nil
+}
+
+func StreamLogsRealTime(cfg Config, ctx context.Context, url string, onLog func(LogEntry), onNet func(NetworkEntry)) error {
+	chromeCtx, cancel, err := CreateChromeContext(ctx, cfg.SkipSSLVerify)
+	if err != nil {
+		return err
+	}
+	defer cancel()
+	if err := EnableChromeDomains(chromeCtx, cfg.ShowLogs, cfg.ShowNetwork); err != nil {
+		return err
+	}
+	maps := GetNetworkMaps()
 	pageStartTime := time.Now()
-	chromedp.ListenTarget(ctx, func(ev interface{}) {
+	handlers := &EventHandlers{
+		OnLog:     onLog,
+		OnNetwork: onNet,
+	}
+	chromedp.ListenTarget(chromeCtx, func(ev interface{}) {
 		if cfg.ShowNetwork {
-			if ev, ok := ev.(*cdpnetwork.EventRequestWillBeSent); ok {
-				if ev.Request != nil {
-					requestMethods.Store(ev.RequestID.String(), ev.Request.Method)
-					requestURLs.Store(ev.RequestID.String(), ev.Request.URL)
-					requestStartTimes.Store(ev.RequestID.String(), float64(time.Since(pageStartTime).Nanoseconds())/1e6)
-				}
+			if evReq, ok := ev.(*cdpnetwork.EventRequestWillBeSent); ok {
+				ProcessNetworkEventRequestWillBeSent(evReq, &maps.Methods, &maps.URLs, &maps.StartTimes, pageStartTime, handlers)
 			}
 		}
 		if cfg.ShowLogs {
-			if ev, ok := ev.(*cdplog.EventEntryAdded); ok {
-				onLog(LogEntry{
-					Level:   ev.Entry.Level.String(),
-					Message: ev.Entry.Text,
-					Time:    time.Now(),
-					Source:  "browser",
-				})
-			}
-			if ev, ok := ev.(*runtime.EventConsoleAPICalled); ok {
-				var message string
-				for _, arg := range ev.Args {
-					if arg.Value != nil {
-						var str string
-						if err := json.Unmarshal(arg.Value, &str); err == nil {
-							message += str + " "
-						} else {
-							message += fmt.Sprintf("%v ", arg.Value)
-						}
-					}
-				}
-				onLog(LogEntry{
-					Level:   ev.Type.String(),
-					Message: strings.TrimSpace(message),
-					Time:    time.Now(),
-					Source:  "console",
-				})
-			}
+			ProcessLogEvent(ev, handlers)
 		}
 		if cfg.ShowNetwork {
-			if ev, ok := ev.(*cdpnetwork.EventResponseReceived); ok {
-				if !ShouldIncludeNetworkEvent(cfg, ev) {
-					return
-				}
-				var method string
-				if methodVal, ok := requestMethods.Load(ev.RequestID.String()); ok {
-					if methodStr, ok := methodVal.(string); ok {
-						method = methodStr
-					}
-				}
-				var requestTiming *cdpnetwork.ResourceTiming
-				var requestStartTime, responseTime float64
-				if ev.Response != nil && ev.Response.Timing != nil {
-					requestTiming = ev.Response.Timing
-				}
-				if timeVal, ok := requestStartTimes.Load(ev.RequestID.String()); ok {
-					if timeFloat, ok := timeVal.(float64); ok {
-						requestStartTime = timeFloat
-					}
-				}
-				responseTime = float64(time.Since(pageStartTime).Nanoseconds()) / 1e6
-				ne := BuildNetworkEntryFromEvent(ev, method, requestTiming, responseTime, requestStartTime)
-				if ne.ResponseStartTime > 0 {
-					responseStartTimesMap.Store(ev.RequestID.String(), responseTime)
-				}
-				onNet(ne)
-				networkEntriesMap.Store(ev.RequestID.String(), ne)
+			if evResp, ok := ev.(*cdpnetwork.EventResponseReceived); ok {
+				ProcessNetworkEventResponseReceived(evResp, cfg, &maps.Methods, &maps.StartTimes, pageStartTime, &maps.NetworkEntries, handlers)
 			}
-			if ev, ok := ev.(*cdpnetwork.EventLoadingFinished); ok {
-				if entryVal, ok := networkEntriesMap.Load(ev.RequestID.String()); ok {
-					if entry, ok := entryVal.(NetworkEntry); ok {
-						loadingFinishedTime := float64(time.Since(pageStartTime).Nanoseconds()) / 1e6
-						if responseStartTimeVal, ok := responseStartTimesMap.Load(ev.RequestID.String()); ok {
-							if responseStartTime, ok := responseStartTimeVal.(float64); ok {
-								entry.ContentDownloadTime = loadingFinishedTime - responseStartTime
-								entry.ContentDownloadTimeFormatted = FormatTiming(entry.ContentDownloadTime)
-								if entry.Duration > 0 && entry.ContentDownloadTime > 0 {
-									entry.Duration = entry.Duration + entry.ContentDownloadTime
-									entry.DurationFormatted = FormatTiming(entry.Duration)
-								}
-								entry.Total = entry.Total + entry.ContentDownloadTime
-								entry.TotalFormatted = FormatTiming(entry.Total)
-								networkEntriesMap.Store(ev.RequestID.String(), entry)
-								onNet(entry)
-							}
-						}
-					}
-				}
+			if evFinished, ok := ev.(*cdpnetwork.EventLoadingFinished); ok {
+				ProcessNetworkEventLoadingFinished(evFinished, &maps.NetworkEntries, pageStartTime, handlers)
 			}
-			// Network loading failures
-			if ev, ok := ev.(*cdpnetwork.EventLoadingFailed); ok {
-				ne := HandleLoadingFailedEvent(ev, &requestMethods, &requestURLs)
-				if ne != nil {
-					onNet(*ne)
-				}
+			if evFailed, ok := ev.(*cdpnetwork.EventLoadingFailed); ok {
+				ProcessNetworkEventLoadingFailed(evFailed, &maps.Methods, &maps.URLs, handlers)
 			}
 		}
 	})
 	if len(cfg.Headers) > 0 || cfg.UserAgent != "" {
-		if err := SetHeaders(ctx, cfg.UserAgent, cfg.Headers); err != nil {
+		if err := SetHeaders(chromeCtx, cfg.UserAgent, cfg.Headers); err != nil {
 			return fmt.Errorf("failed to set headers: %v", err)
 		}
 	}
 	if len(cfg.Cookies) > 0 {
-		if err := SetCookies(ctx, url, cfg.Cookies); err != nil {
+		if err := SetCookies(chromeCtx, url, cfg.Cookies); err != nil {
 			return fmt.Errorf("failed to set cookies: %v", err)
 		}
 	}
-	if err := chromedp.Run(ctx, chromedp.Navigate(url)); err != nil {
+	if err := chromedp.Run(chromeCtx, chromedp.Navigate(url)); err != nil {
 		return fmt.Errorf("failed to navigate to %s: %v", url, err)
 	}
 	if cfg.RotateFingerprints {
-		if err := StartFingerprintRotation(ctx, cfg.FingerprintInterval); err != nil {
+		if err := StartFingerprintRotation(chromeCtx, cfg.FingerprintInterval); err != nil {
 			return fmt.Errorf("failed to start fingerprint rotation: %v", err)
 		}
 	}
-	<-ctx.Done()
+	<-chromeCtx.Done()
 	return nil
 }

@@ -7,6 +7,13 @@ import (
 	"time"
 )
 
+func NormalizeURL(url string) string {
+	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+		return "https://" + url
+	}
+	return url
+}
+
 func GetHostFromURL(rawURL string) string {
 	if strings.HasPrefix(rawURL, "http://") {
 		rawURL = rawURL[7:]

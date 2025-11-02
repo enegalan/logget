@@ -69,6 +69,13 @@ type ColorTheme struct {
 	Cross     string
 }
 
+func GetTheme(colors bool) *ColorTheme {
+	if colors {
+		return DefaultTheme()
+	}
+	return DisabledTheme()
+}
+
 func DefaultTheme() *ColorTheme {
 	return &ColorTheme{
 		Enabled: true,

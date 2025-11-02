@@ -1,57 +1,30 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
 	"io"
 	"log"
 	helpers "logget/helpers"
 	"logget/helpers/flags"
 	"os"
-	"os/signal"
-	"regexp"
-	"strings"
-	"sync"
-	"syscall"
-	"time"
 
-	cdplog "github.com/chromedp/cdproto/log"
-	cdpnetwork "github.com/chromedp/cdproto/network"
-	"github.com/chromedp/cdproto/runtime"
-	"github.com/chromedp/chromedp"
 	"github.com/spf13/cobra"
 )
 
-type LogEntry = helpers.LogEntry
-type NetworkEntry = helpers.NetworkEntry
-
-type OutputData struct {
-	URL      string         `json:"url"`
-	Logs     []LogEntry     `json:"logs,omitempty"`
-	Network  []NetworkEntry `json:"network,omitempty"`
-	Duration time.Duration  `json:"duration"`
-}
-
 var (
-	showLogs         bool
-	showNetwork      bool
-	jsonOutput       bool
-	csvOutput        bool
-	timeout          int
-	wait             int
-	userAgent        flags.UserAgent = "logget/1.0"
-	headers          flags.HeaderArray
-	cookies          flags.CookieArray
-	versionFlag      bool
-	verbose          bool
-	outputFile       flags.OutputFile
-	appendMode       bool
-	version          string = "dev"
-	responseHeaders  map[string]string
-	responseCaptured bool
-	requestHeaders   map[string]string
-	requestCaptured  bool
+	showLogs    bool
+	showNetwork bool
+	jsonOutput  bool
+	csvOutput   bool
+	timeout     int
+	wait        int
+	userAgent   flags.UserAgent = "logget/1.0"
+	headers     flags.HeaderArray
+	cookies     flags.CookieArray
+	versionFlag bool
+	verbose     bool
+	outputFile  flags.OutputFile
+	appendMode  bool
+	version     string = "dev"
 
 	followMode      bool
 	filterPattern   flags.RegexPattern
@@ -66,8 +39,6 @@ var (
 	fingerprintInterval  int
 	harOutput            bool
 
-	logger        *helpers.Logger
-	formatter     *helpers.OutputFormatter
 	xhrOnly       bool
 	documentOnly  bool
 	cssOnly       bool
@@ -85,8 +56,6 @@ var (
 
 func main() {
 	log.SetOutput(io.Discard)
-	logger = helpers.NewLogger(verbose, true)
-	formatter = helpers.NewOutputFormatter(true)
 	var rootCmd = &cobra.Command{
 		Use:   "logget [flags] <url>",
 		Short: "Extract logs and network data from web pages",
@@ -131,492 +100,55 @@ func main() {
 	rootCmd.Flags().IntVar(&fingerprintInterval, "fingerprint-interval", 5000, "Interval in milliseconds for fingerprint rotation")
 	rootCmd.Flags().BoolVar(&harOutput, "har", false, "Output in HAR (HTTP Archive) format")
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Stderr.WriteString("Error: " + err.Error() + "\n")
 		os.Exit(1)
 	}
 }
 
 func runLogget(cmd *cobra.Command, args []string) {
-	logger = helpers.NewLogger(verbose, !noColor)
-	logger.SetQuiet(quiet)
-	formatter = helpers.NewOutputFormatter(!noColor)
-	if versionFlag {
-		logger.PrintHeader(version)
-		os.Exit(0)
+	url := ""
+	if len(args) > 0 {
+		url = args[0]
 	}
-	if len(args) == 0 {
-		logger.PrintError(fmt.Errorf("URL is required"))
-		logger.PrintUsage()
-		os.Exit(1)
+	cmdConfig := helpers.CommandConfig{
+		ShowLogs:             showLogs,
+		ShowNetwork:          showNetwork,
+		JSONOutput:           jsonOutput,
+		CSVOutput:            csvOutput,
+		Timeout:              timeout,
+		Wait:                 wait,
+		UserAgent:            userAgent.Get(),
+		Headers:              []string(headers),
+		Cookies:              []string(cookies),
+		VersionFlag:          versionFlag,
+		Verbose:              verbose,
+		OutputFile:           outputFile.Get(),
+		AppendMode:           appendMode,
+		Version:              version,
+		FollowMode:           followMode,
+		FilterPattern:        filterPattern.Get(),
+		ExcludePattern:       excludePattern.Get(),
+		StatusPattern:        statusPattern.Get(),
+		DomainPattern:        domainPattern.Get(),
+		MimePattern:          mimePattern.Get(),
+		RefreshInterval:      refreshInterval,
+		SkipSSLVerify:        skipSSLVerify,
+		NoRotateFingerprints: noRotateFingerprints,
+		FingerprintInterval:  fingerprintInterval,
+		HAROutput:            harOutput,
+		XHROnly:              xhrOnly,
+		DocumentOnly:         documentOnly,
+		CssOnly:              cssOnly,
+		ScriptOnly:           scriptOnly,
+		FontOnly:             fontOnly,
+		ImgOnly:              imgOnly,
+		MediaOnly:            mediaOnly,
+		ManifestOnly:         manifestOnly,
+		WebSocketOnly:        websocketOnly,
+		NoColor:              noColor,
+		Quiet:                quiet,
+		MinSize:              minSize.Get(),
+		MaxSize:              maxSize.Get(),
 	}
-	url := args[0]
-	processURL(url)
-}
-
-func processURL(url string) {
-	// Fingerprint rotation is enabled by default unless explicitly disabled
-	finalRotateFingerprints := !noRotateFingerprints
-	cfg := helpers.Config{
-		UserAgent:           userAgent.Get(),
-		Headers:             []string(headers),
-		Cookies:             []string(cookies),
-		OutputFile:          outputFile.Get(),
-		AppendMode:          appendMode,
-		FollowMode:          followMode,
-		SkipSSLVerify:       skipSSLVerify,
-		ShowNetwork:         showNetwork,
-		ShowLogs:            showLogs,
-		JSONOutput:          jsonOutput,
-		FilterPattern:       filterPattern.Get(),
-		ExcludePattern:      excludePattern.Get(),
-		StatusPattern:       statusPattern.Get(),
-		DomainPattern:       domainPattern.Get(),
-		MimePattern:         mimePattern.Get(),
-		XHROnly:             xhrOnly,
-		DocumentOnly:        documentOnly,
-		CssOnly:             cssOnly,
-		ScriptOnly:          scriptOnly,
-		FontOnly:            fontOnly,
-		ImgOnly:             imgOnly,
-		MediaOnly:           mediaOnly,
-		ManifestOnly:        manifestOnly,
-		WebSocketOnly:       websocketOnly,
-		MinSize:             minSize.Get(),
-		MaxSize:             maxSize.Get(),
-		RotateFingerprints:  finalRotateFingerprints,
-		FingerprintInterval: fingerprintInterval,
-		HAROutput:           harOutput,
-	}
-	// Quick check: if no data collection flags are specified, show help immediately
-	if !showLogs && !showNetwork && !verbose && !jsonOutput && !harOutput && !followMode {
-		logger.PrintUsage()
-		os.Exit(0)
-	}
-	// Validate and normalize URL
-	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
-		url = "https://" + url
-	}
-	// Create browser context
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
-	defer cancel()
-	opts := append(chromedp.DefaultExecAllocatorOptions[:],
-		chromedp.Flag("headless", true),
-		chromedp.Flag("disable-gpu", true),
-		chromedp.Flag("disable-dev-shm-usage", true),
-		chromedp.Flag("no-sandbox", true),
-		chromedp.Flag("disable-extensions", true),
-		chromedp.Flag("disable-plugins", true),
-		chromedp.Flag("disable-web-security", true),
-		chromedp.Flag("disable-features", "VizDisplayCompositor"),
-		chromedp.Flag("ignore-certificate-errors", true),
-		chromedp.Flag("ignore-ssl-errors", true),
-		chromedp.Flag("allow-running-insecure-content", true),
-		chromedp.Flag("disable-certificate-verification", true),
-	)
-	if skipSSLVerify {
-		opts = append(opts,
-			chromedp.Flag("ignore-certificate-errors-spki-list", true),
-			chromedp.Flag("ignore-ssl-errors", true),
-			chromedp.Flag("ignore-certificate-errors", true),
-		)
-	}
-	allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, opts...)
-	defer allocCancel()
-	ctx, cancel = chromedp.NewContext(allocCtx)
-	defer cancel()
-	initialProtocol, initialStatusCode, err := helpers.GetInitialResponse(cfg, url)
-	if err != nil {
-		logger.Warn("Failed to get initial response: %v", err)
-		initialProtocol = "HTTP/1.1"
-		initialStatusCode = 200
-	}
-	// Collect logs and network data
-	var logs []LogEntry
-	var network []NetworkEntry
-	var responseProtocol string = initialProtocol
-	var responseStatusCode int = initialStatusCode
-	responseHeaders = make(map[string]string)
-	responseCaptured = false
-	requestHeaders = make(map[string]string)
-	requestCaptured = false
-	startTime := time.Now()
-	logger.Progress("Initializing browser context...")
-	if showLogs {
-		logger.Progress("Enabling console log monitoring...")
-		if err := chromedp.Run(ctx, cdplog.Enable(), runtime.Enable()); err != nil {
-			logger.Fatal("Failed to enable log domains: %v", err)
-		}
-	}
-	if showNetwork || verbose {
-		logger.Progress("Enabling network monitoring...")
-		if err := chromedp.Run(ctx, cdpnetwork.Enable()); err != nil {
-			logger.Error("Failed to enable network domain: %v", err)
-		}
-	}
-	requestMethods := sync.Map{}
-	requestHeadersMap := sync.Map{}
-	requestURLs := sync.Map{}
-	requestStartTimes := sync.Map{}
-	networkEntriesMap := sync.Map{}
-	chromedp.ListenTarget(ctx, func(ev interface{}) {
-		if showNetwork || verbose {
-			if ev, ok := ev.(*cdpnetwork.EventRequestWillBeSent); ok {
-				if ev.Request != nil {
-					requestMethods.Store(ev.RequestID.String(), ev.Request.Method)
-					requestURLs.Store(ev.RequestID.String(), ev.Request.URL)
-					headers := make(map[string]string)
-					for name, value := range ev.Request.Headers {
-						if str, ok := value.(string); ok {
-							headers[name] = str
-						} else {
-							headers[name] = fmt.Sprintf("%v", value)
-						}
-					}
-					requestHeadersMap.Store(ev.RequestID.String(), headers)
-					requestStartTimes.Store(ev.RequestID.String(), float64(time.Since(startTime).Nanoseconds())/1e6)
-					if verbose && !requestCaptured && ev.Request.URL == url {
-						requestHeaders = headers
-						requestCaptured = true
-					}
-				}
-			}
-			if ev, ok := ev.(*cdpnetwork.EventRequestWillBeSentExtraInfo); ok {
-				if urlVal, ok := requestURLs.Load(ev.RequestID.String()); ok {
-					if requestURL, ok := urlVal.(string); ok && requestURL == url {
-						headers := make(map[string]string)
-						for name, value := range ev.Headers {
-							if str, ok := value.(string); ok {
-								headers[name] = str
-							} else {
-								headers[name] = fmt.Sprintf("%v", value)
-							}
-						}
-						if verbose {
-							requestHeaders = headers
-							requestCaptured = true
-						}
-					}
-				}
-			}
-		}
-		// Browser logs
-		if showLogs {
-			if ev, ok := ev.(*cdplog.EventEntryAdded); ok {
-				logs = append(logs, LogEntry{
-					Level:   ev.Entry.Level.String(),
-					Message: ev.Entry.Text,
-					Time:    time.Now(),
-					Source:  "browser",
-				})
-			}
-			// JavaScript console logs
-			if ev, ok := ev.(*runtime.EventConsoleAPICalled); ok {
-				var message string
-				for _, arg := range ev.Args {
-					if arg.Value != nil {
-						var str string
-						if err := json.Unmarshal(arg.Value, &str); err == nil {
-							message += str + " "
-						} else {
-							message += fmt.Sprintf("%v ", arg.Value)
-						}
-					}
-				}
-				logs = append(logs, LogEntry{
-					Level:   ev.Type.String(),
-					Message: strings.TrimSpace(message),
-					Time:    time.Now(),
-					Source:  "console",
-				})
-			}
-		}
-		// Network events
-		if showNetwork || verbose {
-			if ev, ok := ev.(*cdpnetwork.EventResponseReceived); ok {
-				if !helpers.ShouldIncludeNetworkEvent(cfg, ev) {
-					return
-				}
-				var method string
-				if methodVal, ok := requestMethods.Load(ev.RequestID.String()); ok {
-					if methodStr, ok := methodVal.(string); ok {
-						method = methodStr
-					}
-				}
-				var requestTiming *cdpnetwork.ResourceTiming
-				var requestStartTime, responseTime float64
-				if ev.Response != nil && ev.Response.Timing != nil {
-					requestTiming = ev.Response.Timing
-				}
-				if timeVal, ok := requestStartTimes.Load(ev.RequestID.String()); ok {
-					if timeFloat, ok := timeVal.(float64); ok {
-						requestStartTime = timeFloat
-					}
-				}
-				responseTime = float64(time.Since(startTime).Nanoseconds()) / 1e6
-				ne := helpers.BuildNetworkEntryFromEvent(ev, method, requestTiming, responseTime, requestStartTime)
-				if ne.ResponseStartTime > 0 {
-					helpers.StoreResponseStartTime(ev.RequestID.String(), responseTime)
-				}
-				if verbose && !responseCaptured {
-					responseHeaders = ne.Headers
-					responseCaptured = true
-				}
-				if showNetwork {
-					network = append(network, ne)
-					networkEntriesMap.Store(ev.RequestID.String(), &network[len(network)-1])
-				}
-			}
-			if ev, ok := ev.(*cdpnetwork.EventLoadingFinished); ok {
-				if entryVal, ok := networkEntriesMap.Load(ev.RequestID.String()); ok {
-					if entry, ok := entryVal.(*helpers.NetworkEntry); ok {
-						loadingFinishedTime := float64(time.Since(startTime).Nanoseconds()) / 1e6
-						if responseStartTime, ok := helpers.GetResponseStartTime(ev.RequestID.String()); ok {
-							entry.ContentDownloadTime = loadingFinishedTime - responseStartTime
-							entry.ContentDownloadTimeFormatted = helpers.FormatTiming(entry.ContentDownloadTime)
-							if entry.Duration > 0 && entry.ContentDownloadTime > 0 {
-								entry.Duration = entry.Duration + entry.ContentDownloadTime
-								entry.DurationFormatted = helpers.FormatTiming(entry.Duration)
-							}
-							entry.Total = entry.Total + entry.ContentDownloadTime
-							entry.TotalFormatted = helpers.FormatTiming(entry.Total)
-						}
-					}
-				}
-			}
-			// Network loading failures
-			if ev, ok := ev.(*cdpnetwork.EventLoadingFailed); ok {
-				ne := helpers.HandleLoadingFailedEvent(ev, &requestMethods, &requestURLs)
-				if ne != nil && showNetwork {
-					network = append(network, *ne)
-				}
-			}
-		}
-	})
-	if len(headers) > 0 || userAgent.Get() != "" {
-		if err := helpers.SetHeaders(ctx, userAgent.Get(), []string(headers)); err != nil {
-			logger.Fatal("Failed to set headers: %v", err)
-		}
-	}
-	// Set cookies if provided
-	if len(cookies) > 0 {
-		logger.Progress("Setting cookies...")
-		if err := helpers.SetCookies(ctx, url, []string(cookies)); err != nil {
-			logger.Fatal("Failed to set cookies: %v", err)
-		}
-	}
-	// Handle follow mode
-	if followMode {
-		if cfg.OutputFile != "" {
-			filePath := cfg.OutputFile
-			var testFile *os.File
-			var testErr error
-			if cfg.AppendMode {
-				testFile, testErr = os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-			} else {
-				testFile, testErr = os.Create(filePath)
-			}
-			if testErr != nil {
-				logger.Fatal("Failed to create/open output file '%s': %v", filePath, testErr)
-			}
-			testFile.Close()
-			if !cfg.AppendMode {
-				if err := os.Truncate(filePath, 0); err != nil {
-					logger.Warn("Failed to truncate output file: %v", err)
-				}
-			}
-			logger.Progress("Streaming logs from %s (Press Ctrl+C to stop) -> %s", url, filePath)
-		} else {
-			logger.Progress("Streaming logs from %s (Press Ctrl+C to stop)", url)
-		}
-		var filterRegex, excludeRegex *regexp.Regexp
-		if !filterPattern.Empty() {
-			if r, err := regexp.Compile(filterPattern.Get()); err == nil {
-				filterRegex = r
-			}
-		}
-		if !excludePattern.Empty() {
-			if r, err := regexp.Compile(excludePattern.Get()); err == nil {
-				excludeRegex = r
-			}
-		}
-		headerWrittenLogs := false
-		headerWrittenNet := false
-		outputErrorCount := 0
-		const maxOutputErrors = 5
-		onLog := func(le helpers.LogEntry) {
-			if !helpers.ShouldShowLine(le.Message, filterRegex, excludeRegex) {
-				return
-			}
-			if jsonOutput {
-				b, _ := json.Marshal(le)
-				if err := helpers.WriteOutput(cfg, string(b)+"\n"); err != nil {
-					outputErrorCount++
-					if outputErrorCount <= maxOutputErrors {
-						logger.Warn("Failed to write to output file: %v", err)
-					}
-					if outputErrorCount == maxOutputErrors {
-						logger.Warn("Too many output errors, suppressing further warnings...")
-					}
-				}
-				return
-			}
-			if csvOutput {
-				if err := formatter.FormatAndOutputLogCSVRow(le, cfg, !headerWrittenLogs); err != nil {
-					outputErrorCount++
-					if outputErrorCount <= maxOutputErrors {
-						logger.Warn("Failed to write CSV log row: %v", err)
-					}
-					if outputErrorCount == maxOutputErrors {
-						logger.Warn("Too many output errors, suppressing further warnings...")
-					}
-				} else {
-					headerWrittenLogs = true
-				}
-				return
-			}
-			if err := formatter.FormatAndOutputLog(le, cfg); err != nil {
-				outputErrorCount++
-				if outputErrorCount <= maxOutputErrors {
-					logger.Warn("Failed to write log entry: %v", err)
-				}
-				if outputErrorCount == maxOutputErrors {
-					logger.Warn("Too many output errors, suppressing further warnings...")
-				}
-			}
-		}
-		onNet := func(ne helpers.NetworkEntry) {
-			if !helpers.ShouldShowLine(ne.URL, filterRegex, excludeRegex) {
-				return
-			}
-			if cfg.MinSize > 0 && ne.Size < cfg.MinSize {
-				return
-			}
-			if cfg.MaxSize > 0 && ne.Size > cfg.MaxSize {
-				return
-			}
-			if jsonOutput {
-				b, _ := json.Marshal(ne)
-				if err := helpers.WriteOutput(cfg, string(b)+"\n"); err != nil {
-					outputErrorCount++
-					if outputErrorCount <= maxOutputErrors {
-						logger.Warn("Failed to write to output file: %v", err)
-					}
-					if outputErrorCount == maxOutputErrors {
-						logger.Warn("Too many output errors, suppressing further warnings...")
-					}
-				}
-				return
-			}
-			if csvOutput {
-				if err := formatter.FormatAndOutputNetworkCSVRow(ne, cfg, !headerWrittenNet); err != nil {
-					outputErrorCount++
-					if outputErrorCount <= maxOutputErrors {
-						logger.Warn("Failed to write CSV network row: %v", err)
-					}
-					if outputErrorCount == maxOutputErrors {
-						logger.Warn("Too many output errors, suppressing further warnings...")
-					}
-				} else {
-					headerWrittenNet = true
-				}
-				return
-			}
-			if err := formatter.FormatAndOutputNetwork(ne, cfg); err != nil {
-				outputErrorCount++
-				if outputErrorCount <= maxOutputErrors {
-					logger.Warn("Failed to write network entry: %v", err)
-				}
-				if outputErrorCount == maxOutputErrors {
-					logger.Warn("Too many output errors, suppressing further warnings...")
-				}
-			}
-		}
-		sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-		defer stop()
-		if err := helpers.StreamLogsRealTime(cfg, sigCtx, url, onLog, onNet); err != nil {
-			logger.Fatal("Error streaming logs: %v", err)
-		}
-		return
-	}
-	logger.Progress("Navigating to %s...", url)
-	tasks := []chromedp.Action{
-		chromedp.Navigate(url),
-		chromedp.Sleep(time.Duration(wait) * time.Millisecond),
-	}
-	if err = chromedp.Run(ctx, tasks...); err != nil {
-		if strings.Contains(err.Error(), "ERR_HTTP_RESPONSE_CODE_FAILURE") {
-			if verbose {
-				fmt.Printf("%s Error (navigation failed)\n", responseProtocol)
-				fmt.Printf("Duration: %v\n", time.Since(startTime))
-				fmt.Println()
-			}
-			logger.Fatal("Navigation failed: %v", err)
-		} else {
-			logger.Fatal("Failed to navigate to %s: %v", url, err)
-		}
-	}
-	if cfg.RotateFingerprints {
-		if err := helpers.StartFingerprintRotation(ctx, cfg.FingerprintInterval); err != nil {
-			logger.Warn("Failed to start fingerprint rotation: %v", err)
-		}
-	}
-	logger.Success("Successfully loaded page: %s", url)
-	statusCode := responseStatusCode
-	duration := time.Since(startTime)
-	output := OutputData{
-		URL:      url,
-		Logs:     logs,
-		Network:  network,
-		Duration: duration,
-	}
-	if cfg.HAROutput {
-		harData, err := helpers.ConvertNetworkEntriesToHAR(network, url, startTime)
-		if err != nil {
-			logger.Fatal("Failed to generate HAR: %v", err)
-		}
-		if err = helpers.WriteOutput(cfg, string(harData)+"\n"); err != nil {
-			logger.Fatal("Failed to write HAR output: %v", err)
-		}
-		if cfg.OutputFile != "" {
-			helpers.LogOutputFileSuccess(cfg, "HAR output", logger)
-		}
-	} else if jsonOutput {
-		jsonData, err := json.MarshalIndent(output, "", "  ")
-		if err != nil {
-			logger.Fatal("Failed to marshal JSON: %v", err)
-		}
-		if err = helpers.WriteOutput(cfg, string(jsonData)+"\n"); err != nil {
-			logger.Fatal("Failed to write output: %v", err)
-		}
-		if cfg.OutputFile != "" {
-			helpers.LogOutputFileSuccess(cfg, "JSON output", logger)
-		}
-	} else if !cfg.HAROutput {
-		var outputContent strings.Builder
-		if verbose && !jsonOutput && !csvOutput {
-			outputContent.WriteString(formatter.FormatHTTPResponse(responseProtocol, statusCode, duration))
-			var requestHeadersList []string
-			if requestCaptured && len(requestHeaders) > 0 {
-				for name, value := range requestHeaders {
-					requestHeadersList = append(requestHeadersList, fmt.Sprintf("%s: %s", name, value))
-				}
-			} else {
-				requestHeadersList = helpers.GenerateHeaders(cfg, url)
-			}
-			outputContent.WriteString(formatter.FormatRequestHeaders(requestHeadersList))
-			outputContent.WriteString(formatter.FormatResponseHeaders(responseHeaders))
-		}
-		if showLogs && len(logs) > 0 {
-			outputContent.WriteString(formatter.FormatConsoleLogs(logs))
-		}
-		if showNetwork && len(network) > 0 {
-			outputContent.WriteString(formatter.FormatNetworkRequests(network))
-		}
-		if err = helpers.WriteOutput(cfg, outputContent.String()); err != nil {
-			logger.Fatal("Failed to write output: %v", err)
-		}
-		if cfg.OutputFile != "" {
-			helpers.LogOutputFileSuccess(cfg, "Output", logger)
-		}
-	}
+	helpers.RunLogget(cmdConfig, url)
 }
