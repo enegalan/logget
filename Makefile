@@ -1,11 +1,11 @@
-.PHONY: build clean test install uninstall release deps help
+.PHONY: build clean test install uninstall release deps help generate-colors
 
 BINARY_NAME=logget
 VERSION=$(shell cat VERSION 2>/dev/null || echo "dev")
 BUILD_DIR=build
 GO_FILES=$(shell find . -name "*.go" -type f)
 
-all: build
+all: generate-colors build
 
 build:
 	@echo "Building $(BINARY_NAME)..."
@@ -50,15 +50,19 @@ release:
 	@echo "Creating release packages..."
 	@cd scripts && ./release.sh
 
+generate-colors:
+	@echo "Generating colors.sh from helpers/colors.go..."
+	@./scripts/generate_colors.sh
+
 help:
 	@echo "Available targets:"
-	@echo "  build        - Build for current platform"
-	@echo "  build-all    - Build for all platforms (Linux, Windows, macOS)"
-	@echo "  clean        - Clean build artifacts"
-	@echo "  test         - Run tests"
-	@echo "  deps         - Install dependencies"
-	@echo "  install      - Install binary to system"
-	@echo "  uninstall    - Remove binary from system"
-	@echo "  release      - Create release packages (ZIP and TAR.GZ)"
-	@echo "  dev          - Build and run example"
-	@echo "  help         - Show this help"
+	@echo "  build           - Build for current platform"
+	@echo "  build-all       - Build for all platforms (Linux, Windows, macOS)"
+	@echo "  clean           - Clean build artifacts"
+	@echo "  test            - Run tests"
+	@echo "  deps            - Install dependencies"
+	@echo "  install         - Install binary to system"
+	@echo "  uninstall       - Remove binary from system"
+	@echo "  release         - Create release packages (ZIP and TAR.GZ)"
+	@echo "  generate-colors - Generate scripts/colors.sh from helpers/colors.go"
+	@echo "  help            - Show this help"

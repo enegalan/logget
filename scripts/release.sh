@@ -5,17 +5,15 @@
 
 set -e
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Get the project root (parent directory of scripts)
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+COLORS_GO="$PROJECT_ROOT/helpers/colors.go"
+COLORS_SH="$SCRIPT_DIR/colors.sh"
+if [ ! -f "$COLORS_SH" ] || [ "$COLORS_GO" -nt "$COLORS_SH" ]; then
+    "$SCRIPT_DIR/generate_colors.sh"
+fi
+source "$COLORS_SH"
 
 # Configuration
 BINARY_NAME="logget"
