@@ -1,6 +1,6 @@
 # logget
 
-A command-line tool similar to `curl` that extracts browser logs and network data from web pages using an embedded Chromium browser.
+A command-line tool to extract browser logs and network data from web pages using an embedded Chromium browser.
 
 ## Features
 
