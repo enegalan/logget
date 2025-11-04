@@ -14,6 +14,7 @@ import (
 
 	cdpnetwork "github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
+	"gopkg.in/yaml.v3"
 )
 
 type OutputData struct {
@@ -27,6 +28,7 @@ type CommandConfig struct {
 	ShowLogs             bool
 	ShowNetwork          bool
 	JSONOutput           bool
+	YAMLOutput           bool
 	CSVOutput            bool
 	Timeout              int
 	Wait                 int
@@ -131,7 +133,7 @@ func writeOutputAndLog(cfg Config, content string, outputType string, logger *Lo
 	}
 }
 
-func writeFinalOutput(cfg Config, output OutputData, network []NetworkEntry, url string, startTime time.Time, responseProtocol string, statusCode int, duration time.Duration, logger *Logger, formatter *OutputFormatter, jsonOutput bool, verbose bool, showLogs bool, showNetwork bool, requestCaptured bool, requestHeaders map[string]string, responseHeaders map[string]string) {
+func writeFinalOutput(cfg Config, output OutputData, network []NetworkEntry, url string, startTime time.Time, responseProtocol string, statusCode int, duration time.Duration, logger *Logger, formatter *OutputFormatter, jsonOutput bool, yamlOutput bool, verbose bool, showLogs bool, showNetwork bool, requestCaptured bool, requestHeaders map[string]string, responseHeaders map[string]string) {
 	if cfg.HAROutput {
 		harData, err := ConvertNetworkEntriesToHAR(network, url, startTime)
 		if err != nil {
@@ -148,8 +150,16 @@ func writeFinalOutput(cfg Config, output OutputData, network []NetworkEntry, url
 		writeOutputAndLog(cfg, string(jsonData)+"\n", "JSON output", logger)
 		return
 	}
+	if yamlOutput {
+		yamlData, err := yaml.Marshal(output)
+		if err != nil {
+			logger.Fatal("Failed to marshal YAML: %v", err)
+		}
+		writeOutputAndLog(cfg, string(yamlData)+"\n", "YAML output", logger)
+		return
+	}
 	var outputContent strings.Builder
-	if verbose && !jsonOutput {
+	if verbose && !jsonOutput && !yamlOutput {
 		outputContent.WriteString(formatter.FormatHTTPResponse(responseProtocol, statusCode, duration))
 		requestHeadersList := getRequestHeadersList(cfg, url, requestCaptured, requestHeaders)
 		outputContent.WriteString(formatter.FormatRequestHeaders(requestHeadersList))
@@ -194,6 +204,14 @@ func outputJSONEntry(entry interface{}, cfg Config) error {
 	return WriteOutput(cfg, string(b)+"\n")
 }
 
+func outputYAMLEntry(entry interface{}, cfg Config) error {
+	b, err := yaml.Marshal(entry)
+	if err != nil {
+		return err
+	}
+	return WriteOutput(cfg, string(b)+"\n")
+}
+
 func outputCSVEntry(entry interface{}, cfg Config, headerWritten *bool, tracker *outputErrorTracker, csvFunc func(interface{}, Config, bool) error, errorMsg string, logger *Logger) {
 	err := csvFunc(entry, cfg, !*headerWritten)
 	tracker.handleError(err, logger, errorMsg)
@@ -202,9 +220,15 @@ func outputCSVEntry(entry interface{}, cfg Config, headerWritten *bool, tracker 
 	}
 }
 
-func outputLogEntry(le LogEntry, cfg Config, headerWritten *bool, tracker *outputErrorTracker, jsonOutput bool, csvOutput bool, formatter *OutputFormatter, logger *Logger) {
+func outputLogEntry(le LogEntry, cfg Config, headerWritten *bool, tracker *outputErrorTracker, jsonOutput bool, yamlOutput bool, csvOutput bool, formatter *OutputFormatter, logger *Logger) {
 	if jsonOutput {
 		if err := outputJSONEntry(le, cfg); err != nil {
+			tracker.handleError(err, logger, "Failed to write to output file: %v")
+		}
+		return
+	}
+	if yamlOutput {
+		if err := outputYAMLEntry(le, cfg); err != nil {
 			tracker.handleError(err, logger, "Failed to write to output file: %v")
 		}
 		return
@@ -219,9 +243,15 @@ func outputLogEntry(le LogEntry, cfg Config, headerWritten *bool, tracker *outpu
 	tracker.handleError(err, logger, "Failed to write log entry: %v")
 }
 
-func outputNetworkEntry(ne NetworkEntry, cfg Config, headerWritten *bool, tracker *outputErrorTracker, jsonOutput bool, csvOutput bool, formatter *OutputFormatter, logger *Logger) {
+func outputNetworkEntry(ne NetworkEntry, cfg Config, headerWritten *bool, tracker *outputErrorTracker, jsonOutput bool, yamlOutput bool, csvOutput bool, formatter *OutputFormatter, logger *Logger) {
 	if jsonOutput {
 		if err := outputJSONEntry(ne, cfg); err != nil {
+			tracker.handleError(err, logger, "Failed to write to output file: %v")
+		}
+		return
+	}
+	if yamlOutput {
+		if err := outputYAMLEntry(ne, cfg); err != nil {
 			tracker.handleError(err, logger, "Failed to write to output file: %v")
 		}
 		return
@@ -283,6 +313,7 @@ func buildConfig(cmdConfig CommandConfig) Config {
 		ShowNetwork:         cmdConfig.ShowNetwork,
 		ShowLogs:            cmdConfig.ShowLogs,
 		JSONOutput:          cmdConfig.JSONOutput,
+		YAMLOutput:          cmdConfig.YAMLOutput,
 		FilterPattern:       cmdConfig.FilterPattern,
 		ExcludePattern:      cmdConfig.ExcludePattern,
 		StatusPattern:       cmdConfig.StatusPattern,
@@ -319,7 +350,7 @@ func RunLogget(cmdConfig CommandConfig, url string) {
 		os.Exit(1)
 	}
 	cfg := buildConfig(cmdConfig)
-	if !cmdConfig.ShowLogs && !cmdConfig.ShowNetwork && !cmdConfig.Verbose && !cmdConfig.JSONOutput && !cmdConfig.HAROutput && !cmdConfig.FollowMode {
+	if !cmdConfig.ShowLogs && !cmdConfig.ShowNetwork && !cmdConfig.Verbose && !cmdConfig.JSONOutput && !cmdConfig.YAMLOutput && !cmdConfig.HAROutput && !cmdConfig.FollowMode {
 		logger.PrintUsage()
 		os.Exit(0)
 	}
@@ -426,13 +457,13 @@ func RunLogget(cmdConfig CommandConfig, url string) {
 			if !ShouldShowLine(le.Message, filterRegex, excludeRegex) {
 				return
 			}
-			outputLogEntry(le, cfg, &headerWrittenLogs, outputErrorTracker, cmdConfig.JSONOutput, cmdConfig.CSVOutput, formatter, logger)
+			outputLogEntry(le, cfg, &headerWrittenLogs, outputErrorTracker, cmdConfig.JSONOutput, cmdConfig.YAMLOutput, cmdConfig.CSVOutput, formatter, logger)
 		}
 		onNet := func(ne NetworkEntry) {
 			if !shouldIncludeNetworkEntry(ne, filterRegex, excludeRegex, cfg.MinSize, cfg.MaxSize) {
 				return
 			}
-			outputNetworkEntry(ne, cfg, &headerWrittenNet, outputErrorTracker, cmdConfig.JSONOutput, cmdConfig.CSVOutput, formatter, logger)
+			outputNetworkEntry(ne, cfg, &headerWrittenNet, outputErrorTracker, cmdConfig.JSONOutput, cmdConfig.YAMLOutput, cmdConfig.CSVOutput, formatter, logger)
 		}
 		sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
@@ -463,5 +494,5 @@ func RunLogget(cmdConfig CommandConfig, url string) {
 		Network:  network,
 		Duration: duration,
 	}
-	writeFinalOutput(cfg, output, network, url, startTime, responseProtocol, statusCode, duration, logger, formatter, cmdConfig.JSONOutput, cmdConfig.Verbose, cmdConfig.ShowLogs, cmdConfig.ShowNetwork, requestCaptured, requestHeaders, responseHeaders)
+	writeFinalOutput(cfg, output, network, url, startTime, responseProtocol, statusCode, duration, logger, formatter, cmdConfig.JSONOutput, cmdConfig.YAMLOutput, cmdConfig.Verbose, cmdConfig.ShowLogs, cmdConfig.ShowNetwork, requestCaptured, requestHeaders, responseHeaders)
 }

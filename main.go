@@ -14,6 +14,7 @@ var (
 	showLogs    bool
 	showNetwork bool
 	jsonOutput  bool
+	yamlOutput  bool
 	csvOutput   bool
 	timeout     int
 	wait        int
@@ -65,6 +66,7 @@ func main() {
 	rootCmd.Flags().BoolVarP(&showLogs, "logs", "L", false, "Show console logs")
 	rootCmd.Flags().BoolVarP(&showNetwork, "network", "N", false, "Show network requests")
 	rootCmd.Flags().BoolVarP(&jsonOutput, "json", "J", false, "Output in JSON format")
+	rootCmd.Flags().BoolVar(&yamlOutput, "yaml", false, "Output in YAML format")
 	rootCmd.Flags().BoolVar(&csvOutput, "csv", false, "Output in CSV format")
 	rootCmd.Flags().IntVarP(&timeout, "timeout", "T", 60, "Timeout in seconds")
 	rootCmd.Flags().IntVarP(&wait, "wait", "W", 3000, "Wait time in milliseconds after page load")
@@ -114,6 +116,7 @@ func runLogget(cmd *cobra.Command, args []string) {
 		ShowLogs:             showLogs,
 		ShowNetwork:          showNetwork,
 		JSONOutput:           jsonOutput,
+		YAMLOutput:           yamlOutput,
 		CSVOutput:            csvOutput,
 		Timeout:              timeout,
 		Wait:                 wait,

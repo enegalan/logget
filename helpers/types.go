@@ -11,6 +11,7 @@ type Config struct {
 	ShowNetwork         bool
 	ShowLogs            bool
 	JSONOutput          bool
+	YAMLOutput          bool
 	FilterPattern       string
 	ExcludePattern      string
 	StatusPattern       string
