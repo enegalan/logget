@@ -213,6 +213,14 @@ var navigationStartTime float64 = -1
 
 var responseStartTimesMap = sync.Map{}
 
+// Track console API messages to identify internal Chrome messages
+// Messages that appear in cdplog but not in runtime.EventConsoleAPICalled are internal
+var consoleAPIMessages = sync.Map{}
+
+// Track JavaScript exceptions to identify real errors
+// Messages that correspond to runtime.EventExceptionThrown are errors
+var exceptionMessages = sync.Map{}
+
 func StoreResponseStartTime(requestID string, responseStartTime float64) {
 	responseStartTimesMap.Store(requestID, responseStartTime)
 }
@@ -411,13 +419,125 @@ type EventHandlers struct {
 	OnRequestWillBeSent func(requestID string, method, url string, headers map[string]string, startTime float64)
 }
 
+func isJavaScriptException(message string) bool {
+	urlPattern := regexp.MustCompile(`(https?://[^\s:]+):(\d+):(\d+)`)
+	matches := urlPattern.FindStringSubmatch(message)
+	if len(matches) >= 3 {
+		locationKey := matches[1] + ":" + matches[2]
+		_, exists := exceptionMessages.Load(locationKey)
+		return exists
+	}
+	// Try pattern "at URL:line:col"
+	atPattern := regexp.MustCompile(`at\s+(https?://[^\s:]+):(\d+):(\d+)`)
+	atMatches := atPattern.FindStringSubmatch(message)
+	if len(atMatches) >= 3 {
+		locationKey := atMatches[1] + ":" + atMatches[2]
+		_, exists := exceptionMessages.Load(locationKey)
+		return exists
+	}
+	return false
+}
+
+func isChromeInternalMessage(message string) bool {
+	_, exists := consoleAPIMessages.Load(message)
+	return !exists
+}
+
 func ProcessLogEvent(ev interface{}, handlers *EventHandlers) {
 	if handlers == nil || handlers.OnLog == nil {
 		return
 	}
-	if ev, ok := ev.(*cdplog.EventEntryAdded); ok {
+	if ev, ok := ev.(*runtime.EventExceptionThrown); ok {
+		var message string
+		if ev.ExceptionDetails != nil {
+			if ev.ExceptionDetails.Exception != nil {
+				if ev.ExceptionDetails.Exception.Description != "" {
+					message = ev.ExceptionDetails.Exception.Description
+				} else if ev.ExceptionDetails.Exception.ClassName != "" {
+					message = ev.ExceptionDetails.Exception.ClassName
+					if ev.ExceptionDetails.Text != "" {
+						message += ": " + ev.ExceptionDetails.Text
+					}
+				}
+			}
+			if message == "" {
+				message = ev.ExceptionDetails.Text
+			}
+			if ev.ExceptionDetails.StackTrace != nil && len(ev.ExceptionDetails.StackTrace.CallFrames) > 0 {
+				for i, frame := range ev.ExceptionDetails.StackTrace.CallFrames {
+					if frame.URL != "" || frame.FunctionName != "" {
+						if frame.FunctionName != "" {
+							message += fmt.Sprintf("\n    at %s", frame.FunctionName)
+						}
+						if frame.URL != "" {
+							if frame.FunctionName != "" {
+								message += fmt.Sprintf(" (%s:%d:%d)", frame.URL, frame.LineNumber+1, frame.ColumnNumber+1)
+							} else {
+								message += fmt.Sprintf("\n    at %s:%d:%d", frame.URL, frame.LineNumber+1, frame.ColumnNumber+1)
+							}
+						}
+					}
+					if i != len(ev.ExceptionDetails.StackTrace.CallFrames)-1 || ev.ExceptionDetails.StackTrace.Parent != nil {
+						continue
+					}
+					parent := ev.ExceptionDetails.StackTrace.Parent
+					if len(parent.CallFrames) == 0 {
+						continue
+					}
+					for _, parentFrame := range parent.CallFrames {
+						if parentFrame.URL == "" && parentFrame.FunctionName == "" {
+							continue
+						}
+						if parentFrame.FunctionName != "" {
+							message += fmt.Sprintf("\n    at %s", parentFrame.FunctionName)
+						}
+						if parentFrame.URL != "" {
+							if parentFrame.FunctionName != "" {
+								message += fmt.Sprintf(" (%s:%d:%d)", parentFrame.URL, parentFrame.LineNumber+1, parentFrame.ColumnNumber+1)
+							} else {
+								message += fmt.Sprintf("\n    at %s:%d:%d", parentFrame.URL, parentFrame.LineNumber+1, parentFrame.ColumnNumber+1)
+							}
+						}
+					}
+				}
+			} else if ev.ExceptionDetails.URL != "" {
+				message += fmt.Sprintf(" at %s:%d:%d", ev.ExceptionDetails.URL, ev.ExceptionDetails.LineNumber+1, ev.ExceptionDetails.ColumnNumber+1)
+			}
+		}
+		if message == "" {
+			message = "Unhandled JavaScript exception"
+		}
+		if ev.ExceptionDetails != nil {
+			var locationKey string
+			if ev.ExceptionDetails.URL != "" {
+				locationKey = ev.ExceptionDetails.URL + ":" + fmt.Sprintf("%d", ev.ExceptionDetails.LineNumber+1)
+				exceptionMessages.Store(locationKey, true)
+			} else if ev.ExceptionDetails.StackTrace != nil && len(ev.ExceptionDetails.StackTrace.CallFrames) > 0 {
+				frame := ev.ExceptionDetails.StackTrace.CallFrames[0]
+				if frame.URL != "" {
+					locationKey = frame.URL + ":" + fmt.Sprintf("%d", frame.LineNumber+1)
+					exceptionMessages.Store(locationKey, true)
+				}
+			}
+		}
 		handlers.OnLog(LogEntry{
-			Level:   ev.Entry.Level.String(),
+			Level:   "error",
+			Message: message,
+			Time:    time.Now(),
+			Source:  "browser",
+		})
+		return
+	}
+	if ev, ok := ev.(*cdplog.EventEntryAdded); ok {
+		if isChromeInternalMessage(ev.Entry.Text) {
+			return
+		}
+		level := ev.Entry.Level.String()
+		if strings.ToUpper(level) == "WARNING" && isJavaScriptException(ev.Entry.Text) {
+			level = "error"
+		}
+		handlers.OnLog(LogEntry{
+			Level:   level,
 			Message: ev.Entry.Text,
 			Time:    time.Now(),
 			Source:  "browser",
@@ -436,9 +556,17 @@ func ProcessLogEvent(ev interface{}, handlers *EventHandlers) {
 				}
 			}
 		}
+		message = strings.TrimSpace(message)
+		if message != "" {
+			consoleAPIMessages.Store(message, true)
+		}
+		level := ev.Type.String()
+		if strings.ToUpper(level) == "WARNING" && isJavaScriptException(message) {
+			level = "error"
+		}
 		handlers.OnLog(LogEntry{
-			Level:   ev.Type.String(),
-			Message: strings.TrimSpace(message),
+			Level:   level,
+			Message: message,
 			Time:    time.Now(),
 			Source:  "console",
 		})
