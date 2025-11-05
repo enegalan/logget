@@ -213,12 +213,8 @@ var navigationStartTime float64 = -1
 
 var responseStartTimesMap = sync.Map{}
 
-// Track console API messages to identify internal Chrome messages
-// Messages that appear in cdplog but not in runtime.EventConsoleAPICalled are internal
 var consoleAPIMessages = sync.Map{}
 
-// Track JavaScript exceptions to identify real errors
-// Messages that correspond to runtime.EventExceptionThrown are errors
 var exceptionMessages = sync.Map{}
 
 func StoreResponseStartTime(requestID string, responseStartTime float64) {
