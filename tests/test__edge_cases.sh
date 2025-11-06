@@ -8,7 +8,7 @@ if "$BINARY_PATH" \
 --verbose \
 --quiet \
 --no-color \
---timeout 30 \
+--timeout 30000 \
 --wait 1000 \
 --user-agent "TestAgent/1.0" \
 --header "X-Test: value" \

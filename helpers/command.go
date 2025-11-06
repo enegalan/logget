@@ -355,7 +355,7 @@ func RunLogget(cmdConfig CommandConfig, url string) {
 		os.Exit(0)
 	}
 	url = NormalizeURL(url)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cmdConfig.Timeout)*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cmdConfig.Timeout)*time.Millisecond)
 	defer cancel()
 	chromeCtx, chromeCancel, err := CreateChromeContext(ctx, cmdConfig.SkipSSLVerify)
 	if err != nil {

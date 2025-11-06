@@ -16,10 +16,10 @@ Example:
 ```bash
 #!/bin/bash
 # Test 1
-run_test "My test 1" --logs --network --timeout 10
+run_test "My test 1" --logs --network --timeout 10000
 
 # Test 2
-run_test "My test 2" --network --filter "test" --timeout 10
+run_test "My test 2" --network --filter "test" --timeout 10000
 ```
 
 That's it! The file will be executed automatically.

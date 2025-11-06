@@ -68,7 +68,7 @@ func main() {
 	rootCmd.Flags().BoolVarP(&jsonOutput, "json", "J", false, "Output in JSON format")
 	rootCmd.Flags().BoolVar(&yamlOutput, "yaml", false, "Output in YAML format")
 	rootCmd.Flags().BoolVar(&csvOutput, "csv", false, "Output in CSV format")
-	rootCmd.Flags().IntVarP(&timeout, "timeout", "T", 60, "Timeout in seconds")
+	rootCmd.Flags().IntVarP(&timeout, "timeout", "T", 60000, "Timeout in milliseconds")
 	rootCmd.Flags().IntVarP(&wait, "wait", "W", 3000, "Wait time in milliseconds after page load")
 	rootCmd.Flags().VarP(&userAgent, "user-agent", "A", "Set User-Agent header")
 	rootCmd.Flags().VarP(&headers, "header", "H", "Add custom headers (format: 'Key: Value') or filename containing headers")
