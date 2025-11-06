@@ -44,5 +44,5 @@ func (c *CookieArray) Set(value string) error {
 }
 
 func (c *CookieArray) Type() string {
-	return "<data|filename>"
+	return "<data|file>"
 }

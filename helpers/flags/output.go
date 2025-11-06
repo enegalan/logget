@@ -14,7 +14,7 @@ func (o *OutputFile) Set(value string) error {
 }
 
 func (o *OutputFile) Type() string {
-	return "<filename>"
+	return "<file>"
 }
 
 func (o *OutputFile) Get() string {
@@ -24,4 +24,3 @@ func (o *OutputFile) Get() string {
 func (o *OutputFile) Empty() bool {
 	return strings.TrimSpace(string(*o)) == ""
 }
-
