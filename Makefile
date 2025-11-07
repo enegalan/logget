@@ -5,11 +5,33 @@ VERSION=$(shell cat VERSION 2>/dev/null || echo "dev")
 BUILD_DIR=build
 GO_FILES=$(shell find . -name "*.go" -type f)
 
+UNAME_S := $(shell uname -s)
+UNAME_M := $(shell uname -m)
+ifeq ($(UNAME_S),Linux)
+	GOOS := linux
+endif
+ifeq ($(UNAME_S),Darwin)
+	GOOS := darwin
+endif
+ifeq ($(UNAME_S),Windows_NT)
+	GOOS := windows
+endif
+
+ifeq ($(UNAME_M),x86_64)
+	GOARCH := amd64
+endif
+ifeq ($(UNAME_M),arm64)
+	GOARCH := arm64
+endif
+ifeq ($(UNAME_M),aarch64)
+	GOARCH := arm64
+endif
+
 all: generate-colors build
 
 build:
-	@echo "Building $(BINARY_NAME)..."
-	@go build -ldflags "-X main.version=$(VERSION)" -o $(BINARY_NAME) .
+	@echo "Building $(BINARY_NAME) for $(GOOS)/$(GOARCH)..."
+	@GOOS=$(GOOS) GOARCH=$(GOARCH) go build -ldflags "-X main.version=$(VERSION)" -o $(BINARY_NAME) .
 	@echo "Build complete: ./$(BINARY_NAME)"
 
 build-all:
