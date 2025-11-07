@@ -336,6 +336,25 @@ func buildConfig(cmdConfig CommandConfig) Config {
 	}
 }
 
+func validateOutputFormats(cmdConfig CommandConfig, logger *Logger) {
+	formatCount := 0
+	if cmdConfig.JSONOutput {
+		formatCount++
+	}
+	if cmdConfig.YAMLOutput {
+		formatCount++
+	}
+	if cmdConfig.CSVOutput {
+		formatCount++
+	}
+	if cmdConfig.HAROutput {
+		formatCount++
+	}
+	if formatCount > 1 {
+		fmt.Println("Only one output format can be specified at a time")
+		os.Exit(1)
+	}
+}
 func RunLogget(cmdConfig CommandConfig, url string) {
 	logger := NewLogger(cmdConfig.Verbose, !cmdConfig.NoColor)
 	logger.SetQuiet(cmdConfig.Quiet)
@@ -349,6 +368,7 @@ func RunLogget(cmdConfig CommandConfig, url string) {
 		logger.PrintUsage()
 		os.Exit(1)
 	}
+	validateOutputFormats(cmdConfig, logger)
 	cfg := buildConfig(cmdConfig)
 	if !cmdConfig.ShowLogs && !cmdConfig.ShowNetwork && !cmdConfig.Verbose && !cmdConfig.JSONOutput && !cmdConfig.YAMLOutput && !cmdConfig.HAROutput && !cmdConfig.FollowMode {
 		logger.PrintUsage()
