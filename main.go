@@ -16,9 +16,9 @@ var (
 	jsonOutput  bool
 	yamlOutput  bool
 	csvOutput   bool
-	timeout     int
-	wait        int
-	userAgent   flags.UserAgent = "logget/1.0"
+	timeout     flags.Milliseconds = 60000
+	wait        flags.Milliseconds = 3000
+	userAgent   flags.UserAgent    = "logget/1.0"
 	headers     flags.HeaderArray
 	cookies     flags.CookieArray
 	versionFlag bool
@@ -33,11 +33,11 @@ var (
 	statusPattern   flags.RegexPattern
 	domainPattern   flags.RegexPattern
 	mimePattern     flags.RegexPattern
-	refreshInterval int
+	refreshInterval flags.Milliseconds = 100
 
 	skipSSLVerify        bool
 	noRotateFingerprints bool
-	fingerprintInterval  int
+	fingerprintInterval  flags.Milliseconds = 5000
 	harOutput            bool
 
 	xhrOnly       bool
@@ -68,8 +68,8 @@ func main() {
 	rootCmd.Flags().BoolVarP(&jsonOutput, "json", "J", false, "Output in JSON format")
 	rootCmd.Flags().BoolVar(&yamlOutput, "yaml", false, "Output in YAML format")
 	rootCmd.Flags().BoolVar(&csvOutput, "csv", false, "Output in CSV format")
-	rootCmd.Flags().IntVarP(&timeout, "timeout", "T", 60000, "Timeout in milliseconds")
-	rootCmd.Flags().IntVarP(&wait, "wait", "W", 3000, "Wait time in milliseconds after page load")
+	rootCmd.Flags().VarP(&timeout, "timeout", "T", "Timeout in milliseconds")
+	rootCmd.Flags().VarP(&wait, "wait", "W", "Wait time in milliseconds after page load")
 	rootCmd.Flags().VarP(&userAgent, "user-agent", "A", "Set User-Agent header")
 	rootCmd.Flags().VarP(&headers, "header", "H", "Add custom headers (format: 'Key: Value') or filename containing headers")
 	rootCmd.Flags().VarP(&cookies, "cookie", "C", "Add cookies (format: 'name=value' or 'name=value; domain=example.com') or filename containing cookies")
@@ -83,7 +83,7 @@ func main() {
 	rootCmd.Flags().VarP(&statusPattern, "status", "", "Only include requests whose HTTP status code matches this regex pattern")
 	rootCmd.Flags().VarP(&domainPattern, "domain", "", "Only include requests whose domain matches this regex pattern")
 	rootCmd.Flags().VarP(&mimePattern, "mime", "", "Only include requests whose MIME type matches this regex pattern")
-	rootCmd.Flags().IntVar(&refreshInterval, "refresh", 100, "Refresh interval in milliseconds for real-time streaming")
+	rootCmd.Flags().Var(&refreshInterval, "refresh", "Refresh interval in milliseconds for real-time streaming")
 	rootCmd.Flags().BoolVarP(&skipSSLVerify, "insecure", "k", false, "Skip SSL certificate verification (useful for self-signed certificates)")
 	rootCmd.Flags().BoolVar(&noColor, "no-color", false, "Disable colored output")
 	rootCmd.Flags().BoolVar(&xhrOnly, "xhr", false, "Only include fetch/XHR requests")
@@ -99,7 +99,7 @@ func main() {
 	rootCmd.Flags().VarP(&maxSize, "max-size", "", "Only include requests whose size is at most this many bytes")
 	rootCmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress progress messages, only show data")
 	rootCmd.Flags().BoolVar(&noRotateFingerprints, "no-rotate-fingerprints", false, "Disable fingerprint rotation (default: enabled)")
-	rootCmd.Flags().IntVar(&fingerprintInterval, "fingerprint-interval", 5000, "Interval in milliseconds for fingerprint rotation")
+	rootCmd.Flags().Var(&fingerprintInterval, "fingerprint-interval", "Interval in milliseconds for fingerprint rotation")
 	rootCmd.Flags().BoolVar(&harOutput, "har", false, "Output in HAR (HTTP Archive) format")
 	if err := rootCmd.Execute(); err != nil {
 		os.Stderr.WriteString("Error: " + err.Error() + "\n")
@@ -118,8 +118,8 @@ func runLogget(cmd *cobra.Command, args []string) {
 		JSONOutput:           jsonOutput,
 		YAMLOutput:           yamlOutput,
 		CSVOutput:            csvOutput,
-		Timeout:              timeout,
-		Wait:                 wait,
+		Timeout:              timeout.Get(),
+		Wait:                 wait.Get(),
 		UserAgent:            userAgent.Get(),
 		Headers:              []string(headers),
 		Cookies:              []string(cookies),
@@ -134,10 +134,10 @@ func runLogget(cmd *cobra.Command, args []string) {
 		StatusPattern:        statusPattern.Get(),
 		DomainPattern:        domainPattern.Get(),
 		MimePattern:          mimePattern.Get(),
-		RefreshInterval:      refreshInterval,
+		RefreshInterval:      refreshInterval.Get(),
 		SkipSSLVerify:        skipSSLVerify,
 		NoRotateFingerprints: noRotateFingerprints,
-		FingerprintInterval:  fingerprintInterval,
+		FingerprintInterval:  fingerprintInterval.Get(),
 		HAROutput:            harOutput,
 		XHROnly:              xhrOnly,
 		DocumentOnly:         documentOnly,
