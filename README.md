@@ -8,15 +8,9 @@ A command-line tool to extract browser logs and network data from web pages usin
 - **Network Monitoring**: Track all HTTP requests (fetch, XMLHttpRequest) with headers, status codes, and timing
 - **Cross-Platform**: Works on Windows, Linux, and macOS
 - **No Chrome Required**: Uses embedded Chromium via `chromedp`
-- **JSON Output**: Structured data output for easy parsing
-- **File Output**: Write results to files instead of stdout
-- **Append Mode**: Add output to existing files instead of overwriting
 - **Custom Headers**: Add custom HTTP headers like curl (supports files)
 - **Cookie Support**: Set cookies for authenticated requests (supports files)
 - **Configurable Timeout**: Set custom timeout values
-- **Fingerprint Rotation**: Rotate navigator fingerprints (userAgent, platform, language, screen properties, WebGL, Canvas) to prevent tracking
-- **Performance Metrics**: Detailed timing metrics (Duration, TTFB, Connect Time, DNS, SSL, Send, Wait, Receive times, Content Download Time, Queued Time, Total)
-- **HAR Export**: Export network data in HAR (HTTP Archive) format
 
 ## Links
 
