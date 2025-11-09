@@ -133,13 +133,17 @@ func writeOutputAndLog(cfg Config, content string, outputType string, logger *Lo
 	}
 }
 
+func marshalAndWrite(cfg Config, data []byte, outputType string, logger *Logger) {
+	writeOutputAndLog(cfg, string(data)+"\n", outputType, logger)
+}
+
 func writeFinalOutput(cfg Config, output OutputData, network []NetworkEntry, url string, startTime time.Time, responseProtocol string, statusCode int, duration time.Duration, logger *Logger, formatter *OutputFormatter, jsonOutput bool, yamlOutput bool, verbose bool, showLogs bool, showNetwork bool, requestCaptured bool, requestHeaders map[string]string, responseHeaders map[string]string) {
 	if cfg.HAROutput {
 		harData, err := ConvertNetworkEntriesToHAR(network, url, startTime)
 		if err != nil {
 			logger.Fatal("Failed to generate HAR: %v", err)
 		}
-		writeOutputAndLog(cfg, string(harData)+"\n", "HAR output", logger)
+		marshalAndWrite(cfg, harData, "HAR output", logger)
 		return
 	}
 	if jsonOutput {
@@ -147,7 +151,7 @@ func writeFinalOutput(cfg Config, output OutputData, network []NetworkEntry, url
 		if err != nil {
 			logger.Fatal("Failed to marshal JSON: %v", err)
 		}
-		writeOutputAndLog(cfg, string(jsonData)+"\n", "JSON output", logger)
+		marshalAndWrite(cfg, jsonData, "JSON output", logger)
 		return
 	}
 	if yamlOutput {
@@ -155,7 +159,7 @@ func writeFinalOutput(cfg Config, output OutputData, network []NetworkEntry, url
 		if err != nil {
 			logger.Fatal("Failed to marshal YAML: %v", err)
 		}
-		writeOutputAndLog(cfg, string(yamlData)+"\n", "YAML output", logger)
+		marshalAndWrite(cfg, yamlData, "YAML output", logger)
 		return
 	}
 	var outputContent strings.Builder
@@ -328,7 +332,7 @@ func buildConfig(cmdConfig CommandConfig) Config {
 	}
 }
 
-func validateOutputFormats(cmdConfig CommandConfig, logger *Logger) {
+func validateOutputFormats(cmdConfig CommandConfig) {
 	formats := []bool{cmdConfig.JSONOutput, cmdConfig.YAMLOutput, cmdConfig.CSVOutput, cmdConfig.HAROutput}
 	formatCount := 0
 	for _, f := range formats {
@@ -354,7 +358,7 @@ func RunLogget(cmdConfig CommandConfig, url string) {
 		logger.PrintUsage()
 		os.Exit(1)
 	}
-	validateOutputFormats(cmdConfig, logger)
+	validateOutputFormats(cmdConfig)
 	cfg := buildConfig(cmdConfig)
 	hasAnyOutput := cmdConfig.ShowLogs || cmdConfig.ShowNetwork || cmdConfig.Verbose ||
 		cmdConfig.JSONOutput || cmdConfig.YAMLOutput || cmdConfig.HAROutput || cmdConfig.FollowMode
@@ -385,7 +389,8 @@ func RunLogget(cmdConfig CommandConfig, url string) {
 	requestHeaders := make(map[string]string)
 	requestCaptured := false
 	startTime := time.Now()
-	if err := EnableChromeDomains(chromeCtx, cmdConfig.ShowLogs, cmdConfig.ShowNetwork || cmdConfig.Verbose); err != nil {
+	showNetworkOrVerbose := cmdConfig.ShowNetwork || cmdConfig.Verbose
+	if err := EnableChromeDomains(chromeCtx, cmdConfig.ShowLogs, showNetworkOrVerbose); err != nil {
 		if cmdConfig.ShowLogs {
 			logger.Fatal("Failed to enable log domains: %v", err)
 		} else {
@@ -410,7 +415,7 @@ func RunLogget(cmdConfig CommandConfig, url string) {
 		},
 	}
 	chromedp.ListenTarget(chromeCtx, func(ev interface{}) {
-		if cmdConfig.ShowNetwork || cmdConfig.Verbose {
+		if showNetworkOrVerbose {
 			if evReq, ok := ev.(*cdpnetwork.EventRequestWillBeSent); ok {
 				ProcessNetworkEventRequestWillBeSent(evReq, &requestMethods, &requestURLs, &requestStartTimes, startTime, handlers)
 			}
@@ -424,7 +429,7 @@ func RunLogget(cmdConfig CommandConfig, url string) {
 		if cmdConfig.ShowLogs {
 			ProcessLogEvent(ev, handlers)
 		}
-		if cmdConfig.ShowNetwork || cmdConfig.Verbose {
+		if showNetworkOrVerbose {
 			if evResp, ok := ev.(*cdpnetwork.EventResponseReceived); ok {
 				setupNetworkHandlerForResponse(evResp, handlers, cmdConfig.ShowNetwork, &network, &networkEntriesMap)
 				ne := ProcessNetworkEventResponseReceived(evResp, cfg, &requestMethods, &requestStartTimes, startTime, &networkEntriesMap, handlers)

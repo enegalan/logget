@@ -221,18 +221,8 @@ func calcTimeDiff(start, end float64) float64 {
 
 func BuildNetworkEntryFromEvent(ev *cdpnetwork.EventResponseReceived, requestMethod string, requestTiming *cdpnetwork.ResourceTiming, responseTime float64, requestTime float64) NetworkEntry {
 	response := ev.Response
-	headers := make(map[string]string)
-	for name, value := range response.Headers {
-		if str, ok := value.(string); ok {
-			headers[name] = str
-		} else {
-			headers[name] = fmt.Sprintf("%v", value)
-		}
-	}
-	method := requestMethod
-	if method == "" {
-		method = "GET"
-	}
+	headers := ConvertEventHeaders(response.Headers)
+	method := getDefaultMethod(requestMethod)
 	var duration, ttfb, connectTime, dnsTime, sslTime, receiveTime, sendTime, waitTime float64
 	var requestStartTime, responseStartTime float64
 	if requestTiming != nil {
@@ -395,20 +385,17 @@ type EventHandlers struct {
 }
 
 func isJavaScriptException(message string) bool {
-	urlPattern := regexp.MustCompile(`(https?://[^\s:]+):(\d+):(\d+)`)
-	matches := urlPattern.FindStringSubmatch(message)
-	if len(matches) >= 3 {
-		locationKey := matches[1] + ":" + matches[2]
-		_, exists := exceptionMessages.Load(locationKey)
-		return exists
+	patterns := []*regexp.Regexp{
+		regexp.MustCompile(`(?:^|\s)(https?://[^\s:]+):(\d+):(\d+)`), // URL:line:col
+		regexp.MustCompile(`at\s+(https?://[^\s:]+):(\d+):(\d+)`),    // at URL:line:col
 	}
-	// Try pattern "at URL:line:col"
-	atPattern := regexp.MustCompile(`at\s+(https?://[^\s:]+):(\d+):(\d+)`)
-	atMatches := atPattern.FindStringSubmatch(message)
-	if len(atMatches) >= 3 {
-		locationKey := atMatches[1] + ":" + atMatches[2]
-		_, exists := exceptionMessages.Load(locationKey)
-		return exists
+	for _, re := range patterns {
+		if matches := re.FindStringSubmatch(message); len(matches) >= 3 {
+			locationKey := matches[1] + ":" + matches[2]
+			if _, exists := exceptionMessages.Load(locationKey); exists {
+				return true
+			}
+		}
 	}
 	return false
 }
@@ -447,6 +434,13 @@ func storeExceptionLocation(ed *runtime.ExceptionDetails) {
 	if locationKey != "" {
 		exceptionMessages.Store(locationKey, true)
 	}
+}
+
+func normalizeLogLevel(level string, message string) string {
+	if strings.ToUpper(level) == "WARNING" && isJavaScriptException(message) {
+		return "error"
+	}
+	return level
 }
 
 func createLogEntry(level, message, source string) LogEntry {
@@ -498,33 +492,28 @@ func ProcessLogEvent(ev interface{}, handlers *EventHandlers) {
 		if isChromeInternalMessage(ev.Entry.Text) {
 			return
 		}
-		level := ev.Entry.Level.String()
-		if strings.ToUpper(level) == "WARNING" && isJavaScriptException(ev.Entry.Text) {
-			level = "error"
-		}
+		level := normalizeLogLevel(ev.Entry.Level.String(), ev.Entry.Text)
 		handlers.OnLog(createLogEntry(level, ev.Entry.Text, "browser"))
 		return
 	}
 	if ev, ok := ev.(*runtime.EventConsoleAPICalled); ok {
 		var message string
 		for _, arg := range ev.Args {
-			if arg.Value != nil {
-				var str string
-				if err := json.Unmarshal(arg.Value, &str); err == nil {
-					message += str + " "
-				} else {
-					message += fmt.Sprintf("%v ", arg.Value)
-				}
+			if arg.Value == nil {
+				continue
+			}
+			var str string
+			if err := json.Unmarshal(arg.Value, &str); err == nil {
+				message += str + " "
+			} else {
+				message += fmt.Sprintf("%v ", arg.Value)
 			}
 		}
 		message = strings.TrimSpace(message)
 		if message != "" {
 			consoleAPIMessages.Store(message, true)
 		}
-		level := ev.Type.String()
-		if strings.ToUpper(level) == "WARNING" && isJavaScriptException(message) {
-			level = "error"
-		}
+		level := normalizeLogLevel(ev.Type.String(), message)
 		handlers.OnLog(createLogEntry(level, message, "console"))
 	}
 }
