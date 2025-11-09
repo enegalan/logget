@@ -364,7 +364,7 @@ func RunLogget(cmdConfig CommandConfig, url string) {
 		os.Exit(0)
 	}
 	if url == "" {
-		logger.PrintError(fmt.Errorf("URL is required"))
+		logger.PrintError(fmt.Errorf("no URL specified"))
 		logger.PrintUsage()
 		os.Exit(1)
 	}

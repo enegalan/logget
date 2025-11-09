@@ -18,59 +18,50 @@ func RotateNavigatorFingerprints(ctx context.Context, intervalMs int) error {
 	}
 	js := fmt.Sprintf(`(function() {
 		const fingerprint = %s;
-		// Override navigator.userAgent
-		try {
+		try { // Override navigator.userAgent
 			Object.defineProperty(navigator, 'userAgent', {
 				get: function() { return fingerprint.userAgent; },
 				configurable: true
 			});
 		} catch(e) {}
-		// Override navigator.platform
-		try {
+		try { // Override navigator.platform
 			Object.defineProperty(navigator, 'platform', {
 				get: function() { return fingerprint.platform; },
 				configurable: true
 			});
 		} catch(e) {}
-		// Override navigator.language
-		try {
+		try { // Override navigator.language
 			Object.defineProperty(navigator, 'language', {
 				get: function() { return fingerprint.language; },
 				configurable: true
 			});
 		} catch(e) {}
-		// Override navigator.languages
-		try {
+		try { // Override navigator.languages
 			Object.defineProperty(navigator, 'languages', {
 				get: function() { return fingerprint.languages; },
 				configurable: true
 			});
 		} catch(e) {}
-		// Override navigator.hardwareConcurrency
-		try {
+		try { // Override navigator.hardwareConcurrency
 			Object.defineProperty(navigator, 'hardwareConcurrency', {
 				get: function() { return fingerprint.hardwareConcurrency; },
 				configurable: true
 			});
 		} catch(e) {}
-		// Override navigator.deviceMemory
-		try {
-			if ('deviceMemory' in navigator) {
-				Object.defineProperty(navigator, 'deviceMemory', {
-					get: function() { return fingerprint.deviceMemory; },
-					configurable: true
-				});
-			}
+		try { // Override navigator.deviceMemory
+			if (!('deviceMemory' in navigator)) return;
+			Object.defineProperty(navigator, 'deviceMemory', {
+				get: function() { return fingerprint.deviceMemory; },
+				configurable: true
+			});
 		} catch(e) {}
-		// Override navigator.maxTouchPoints
-		try {
+		try { // Override navigator.maxTouchPoints
 			Object.defineProperty(navigator, 'maxTouchPoints', {
 				get: function() { return fingerprint.maxTouchPoints; },
 				configurable: true
 			});
 		} catch(e) {}
-		// Override screen properties
-		try {
+		try { // Override screen properties
 			Object.defineProperty(screen, 'width', {
 				get: function() { return fingerprint.screenWidth; },
 				configurable: true
@@ -96,31 +87,23 @@ func RotateNavigatorFingerprints(ctx context.Context, intervalMs int) error {
 				configurable: true
 			});
 		} catch(e) {}
-		// Override WebGL vendor/renderer
-		try {
-			if (typeof WebGLRenderingContext !== 'undefined') {
-				const getParameter = WebGLRenderingContext.prototype.getParameter;
-				WebGLRenderingContext.prototype.getParameter = function(parameter) {
-					if (parameter === 37445) {
-						return fingerprint.webglVendor;
-					}
-					if (parameter === 37446) {
-						return fingerprint.webglRenderer;
-					}
-					return getParameter.call(this, parameter);
-				};
-			}
+		try { // Override WebGL vendor/renderer
+			if (typeof WebGLRenderingContext === 'undefined') return;
+			const getParameter = WebGLRenderingContext.prototype.getParameter;
+			WebGLRenderingContext.prototype.getParameter = function(parameter) {
+				if (parameter === 37445) return fingerprint.webglVendor;
+				if (parameter === 37446) return fingerprint.webglRenderer;
+				return getParameter.call(this, parameter);
+			};
 		} catch(e) {}
-		// Override Canvas fingerprinting with random noise
-		try {
+		try { // Override Canvas fingerprinting with random noise
 			const originalGetImageData = CanvasRenderingContext2D.prototype.getImageData;
 			CanvasRenderingContext2D.prototype.getImageData = function(sx, sy, sw, sh) {
 				const imageData = originalGetImageData.call(this, sx, sy, sw, sh);
-				if (imageData && imageData.data) {
-					for (let i = 0; i < imageData.data.length; i += 4) {
-						const noise = (Math.random() - 0.5) * 2;
-						imageData.data[i] = Math.max(0, Math.min(255, imageData.data[i] + noise));
-					}
+				if (!imageData || !imageData.data) return imageData;
+				for (let i = 0; i < imageData.data.length; i += 4) {
+					const noise = (Math.random() - 0.5) * 2;
+					imageData.data[i] = Math.max(0, Math.min(255, imageData.data[i] + noise));
 				}
 				return imageData;
 			};
@@ -128,36 +111,32 @@ func RotateNavigatorFingerprints(ctx context.Context, intervalMs int) error {
 			HTMLCanvasElement.prototype.toBlob = function(callback, type, quality) {
 				const canvas = this;
 				const ctx = canvas.getContext('2d');
-				if (ctx) {
-					try {
-						const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-						if (imageData && imageData.data) {
-							for (let i = 0; i < imageData.data.length; i += 4) {
-								const noise = (Math.random() - 0.5) * 2;
-								imageData.data[i] = Math.max(0, Math.min(255, imageData.data[i] + noise));
-							}
-							ctx.putImageData(imageData, 0, 0);
-						}
-					} catch(e) {}
-				}
+				if (!ctx) return originalToBlob.call(this, callback, type, quality);
+				try {
+					const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+					if (!imageData || !imageData.data) return originalToBlob.call(this, callback, type, quality);
+					for (let i = 0; i < imageData.data.length; i += 4) {
+						const noise = (Math.random() - 0.5) * 2;
+						imageData.data[i] = Math.max(0, Math.min(255, imageData.data[i] + noise));
+					}
+					ctx.putImageData(imageData, 0, 0);
+				} catch(e) {}
 				return originalToBlob.call(this, callback, type, quality);
 			};
 			const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
 			HTMLCanvasElement.prototype.toDataURL = function(type, quality) {
 				const canvas = this;
 				const ctx = canvas.getContext('2d');
-				if (ctx) {
-					try {
-						const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-						if (imageData && imageData.data) {
-							for (let i = 0; i < imageData.data.length; i += 4) {
-								const noise = (Math.random() - 0.5) * 2;
-								imageData.data[i] = Math.max(0, Math.min(255, imageData.data[i] + noise));
-							}
-							ctx.putImageData(imageData, 0, 0);
-						}
-					} catch(e) {}
-				}
+				if (!ctx) return originalToDataURL.call(this, type, quality);
+				try {
+					const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+					if (!imageData || !imageData.data) return originalToDataURL.call(this, type, quality);
+					for (let i = 0; i < imageData.data.length; i += 4) {
+						const noise = (Math.random() - 0.5) * 2;
+						imageData.data[i] = Math.max(0, Math.min(255, imageData.data[i] + noise));
+					}
+					ctx.putImageData(imageData, 0, 0);
+				} catch(e) {}
 				return originalToDataURL.call(this, type, quality);
 			};
 		} catch(e) {}
@@ -173,12 +152,10 @@ func StartFingerprintRotation(ctx context.Context, intervalMs int) error {
 	if intervalMs <= 0 {
 		return nil
 	}
-	// Initial rotation
-	if err := RotateNavigatorFingerprints(ctx, intervalMs); err != nil {
+	if err := RotateNavigatorFingerprints(ctx, intervalMs); err != nil { // Initial rotation
 		return err
 	}
-	// Set up periodic rotation
-	go func() {
+	go func() { // Set up periodic rotation
 		ticker := time.NewTicker(time.Duration(intervalMs) * time.Millisecond)
 		defer ticker.Stop()
 		for {
@@ -192,7 +169,6 @@ func StartFingerprintRotation(ctx context.Context, intervalMs int) error {
 			}
 		}
 	}()
-
 	return nil
 }
 
@@ -213,7 +189,6 @@ type fingerprintConfig struct {
 }
 
 func generateFingerprint() fingerprintConfig {
-	rand.Seed(time.Now().UnixNano())
 	userAgents := []string{
 		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
 		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",

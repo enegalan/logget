@@ -125,20 +125,16 @@ func (l *Logger) Separator() {
 }
 
 func (l *Logger) PrintHeader(version string) {
-	// Top border
 	topBorder := l.theme.FormatBorder("┌─────────────────────────────────────────────────────────────┐")
 	fmt.Fprintf(os.Stderr, "%s\n", topBorder)
-	// Title line
 	titleSpaces := strings.Repeat(" ", 51-len(version))
 	titleLine := fmt.Sprintf("│ logget v%s%s │", version, titleSpaces)
 	formattedTitleLine := l.theme.FormatBorder(titleLine)
 	fmt.Fprintf(os.Stderr, "%s\n", formattedTitleLine)
-	// Subtitle line
 	subtitleSpaces := strings.Repeat(" ", 21)
 	subtitleLine := fmt.Sprintf("│ Web Log & Network Data Extraction Tool %s│", subtitleSpaces)
 	formattedSubtitleLine := l.theme.FormatBorder(subtitleLine)
 	fmt.Fprintf(os.Stderr, "%s\n", formattedSubtitleLine)
-	// Bottom border
 	bottomBorder := l.theme.FormatBorder("└─────────────────────────────────────────────────────────────┘")
 	fmt.Fprintf(os.Stderr, "%s\n", bottomBorder)
 	fmt.Fprintf(os.Stderr, "\n")
@@ -150,10 +146,4 @@ func (l *Logger) PrintUsage() {
 
 func (l *Logger) PrintError(err error) {
 	fmt.Fprintf(os.Stderr, "logget: %v\n", err)
-}
-
-func (l *Logger) PrintWarning(format string, args ...interface{}) {
-	warningText := l.theme.Bold("Warning:")
-	message := fmt.Sprintf(format, args...)
-	fmt.Fprintf(os.Stderr, "%s logget: %s\n", warningText, message)
 }
