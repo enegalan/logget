@@ -100,88 +100,70 @@ type NetworkEntry struct {
 }
 
 func ShouldIncludeNetworkEvent(cfg Config, ev *cdpnetwork.EventResponseReceived) bool {
-	if cfg.XHROnly {
-		if !(ev.Type == cdpnetwork.ResourceTypeXHR || ev.Type == cdpnetwork.ResourceTypeFetch) {
+	typeChecks := []struct {
+		enabled bool
+		check   func() bool
+	}{
+		{cfg.XHROnly, func() bool {
+			return ev.Type == cdpnetwork.ResourceTypeXHR || ev.Type == cdpnetwork.ResourceTypeFetch
+		}},
+		{cfg.DocumentOnly, func() bool { return ev.Type == cdpnetwork.ResourceTypeDocument }},
+		{cfg.CssOnly, func() bool { return ev.Type == cdpnetwork.ResourceTypeStylesheet }},
+		{cfg.ScriptOnly, func() bool { return ev.Type == cdpnetwork.ResourceTypeScript }},
+		{cfg.FontOnly, func() bool { return ev.Type == cdpnetwork.ResourceTypeFont }},
+		{cfg.ImgOnly, func() bool { return ev.Type == cdpnetwork.ResourceTypeImage }},
+		{cfg.MediaOnly, func() bool { return ev.Type == cdpnetwork.ResourceTypeMedia }},
+		{cfg.ManifestOnly, func() bool { return ev.Type == cdpnetwork.ResourceTypeManifest }},
+		{cfg.WebSocketOnly, func() bool { return ev.Type == cdpnetwork.ResourceTypeWebSocket }},
+	}
+	for _, tc := range typeChecks {
+		if tc.enabled && !tc.check() {
 			return false
 		}
 	}
-	if cfg.DocumentOnly {
-		if ev.Type != cdpnetwork.ResourceTypeDocument {
-			return false
-		}
-	}
-	if cfg.CssOnly {
-		if ev.Type != cdpnetwork.ResourceTypeStylesheet {
-			return false
-		}
-	}
-	if cfg.ScriptOnly {
-		if ev.Type != cdpnetwork.ResourceTypeScript {
-			return false
-		}
-	}
-	if cfg.FontOnly {
-		if ev.Type != cdpnetwork.ResourceTypeFont {
-			return false
-		}
-	}
-	if cfg.ImgOnly {
-		if ev.Type != cdpnetwork.ResourceTypeImage {
-			return false
-		}
-	}
-	if cfg.MediaOnly {
-		if ev.Type != cdpnetwork.ResourceTypeMedia {
-			return false
-		}
-	}
-	if cfg.ManifestOnly {
-		if ev.Type != cdpnetwork.ResourceTypeManifest {
-			return false
-		}
-	}
-	if cfg.WebSocketOnly {
-		if ev.Type != cdpnetwork.ResourceTypeWebSocket {
-			return false
-		}
-	}
-	if cfg.MimePattern != "" {
-		if ev.Response == nil {
-			return false
-		}
-		mimeCandidate := strings.ToLower(string(ev.Response.MimeType))
-		if ctRaw, ok := ev.Response.Headers["Content-Type"]; ok {
-			if s, ok := ctRaw.(string); ok && s != "" {
-				mimeCandidate = strings.ToLower(s)
-			}
-		}
-		if r, err := regexp.Compile(cfg.MimePattern); err == nil {
-			if !r.MatchString(mimeCandidate) {
+	patternChecks := []struct {
+		pattern string
+		check   func() bool
+	}{
+		{cfg.MimePattern, func() bool {
+			if ev.Response == nil {
 				return false
 			}
-		}
-	}
-	if cfg.StatusPattern != "" {
-		if ev.Response == nil {
-			return false
-		}
-		if r, err := regexp.Compile(cfg.StatusPattern); err == nil {
-			if !r.MatchString(fmt.Sprintf("%d", int(ev.Response.Status))) {
-				return false
-			}
-		}
-	}
-	if cfg.DomainPattern != "" {
-		if ev.Response == nil {
-			return false
-		}
-		if u, err := neturl.Parse(ev.Response.URL); err == nil {
-			host := u.Hostname()
-			if r, err := regexp.Compile(cfg.DomainPattern); err == nil {
-				if !r.MatchString(host) {
-					return false
+			mimeCandidate := strings.ToLower(string(ev.Response.MimeType))
+			if ctRaw, ok := ev.Response.Headers["Content-Type"]; ok {
+				if s, ok := ctRaw.(string); ok && s != "" {
+					mimeCandidate = strings.ToLower(s)
 				}
 			}
+			if r, err := regexp.Compile(cfg.MimePattern); err == nil {
+				return r.MatchString(mimeCandidate)
+			}
+			return false
+		}},
+		{cfg.StatusPattern, func() bool {
+			if ev.Response == nil {
+				return false
+			}
+			if r, err := regexp.Compile(cfg.StatusPattern); err == nil {
+				return r.MatchString(fmt.Sprintf("%d", int(ev.Response.Status)))
+			}
+			return false
+		}},
+		{cfg.DomainPattern, func() bool {
+			if ev.Response == nil {
+				return false
+			}
+			if u, err := neturl.Parse(ev.Response.URL); err == nil {
+				if r, err := regexp.Compile(cfg.DomainPattern); err == nil {
+					return r.MatchString(u.Hostname())
+				}
+			}
+			return false
+		}},
+	}
+	for _, pc := range patternChecks {
+		if pc.pattern != "" && !pc.check() {
+			return false
 		}
 	}
 	if cfg.MinSize > 0 || cfg.MaxSize > 0 {
@@ -439,6 +421,41 @@ func isChromeInternalMessage(message string) bool {
 	return !exists
 }
 
+func formatFrame(frame *runtime.CallFrame) string {
+	if frame.URL == "" && frame.FunctionName == "" {
+		return ""
+	}
+	if frame.FunctionName != "" {
+		if frame.URL != "" {
+			return fmt.Sprintf("\n    at %s (%s:%d:%d)", frame.FunctionName, frame.URL, frame.LineNumber+1, frame.ColumnNumber+1)
+		}
+		return fmt.Sprintf("\n    at %s", frame.FunctionName)
+	}
+	return fmt.Sprintf("\n    at %s:%d:%d", frame.URL, frame.LineNumber+1, frame.ColumnNumber+1)
+}
+
+func storeExceptionLocation(ed *runtime.ExceptionDetails) {
+	if ed == nil {
+		return
+	}
+	var locationKey string
+	if ed.URL != "" {
+		locationKey = fmt.Sprintf("%s:%d", ed.URL, ed.LineNumber+1)
+	} else if ed.StackTrace != nil && len(ed.StackTrace.CallFrames) > 0 {
+		frame := ed.StackTrace.CallFrames[0]
+		if frame.URL != "" {
+			locationKey = fmt.Sprintf("%s:%d", frame.URL, frame.LineNumber+1)
+		}
+	}
+	if locationKey != "" {
+		exceptionMessages.Store(locationKey, true)
+	}
+}
+
+func createLogEntry(level, message, source string) LogEntry {
+	return LogEntry{Level: level, Message: message, Time: time.Now(), Source: source}
+}
+
 func ProcessLogEvent(ev interface{}, handlers *EventHandlers) {
 	if handlers == nil || handlers.OnLog == nil {
 		return
@@ -461,38 +478,11 @@ func ProcessLogEvent(ev interface{}, handlers *EventHandlers) {
 			}
 			if ev.ExceptionDetails.StackTrace != nil && len(ev.ExceptionDetails.StackTrace.CallFrames) > 0 {
 				for i, frame := range ev.ExceptionDetails.StackTrace.CallFrames {
-					if frame.URL != "" || frame.FunctionName != "" {
-						if frame.FunctionName != "" {
-							message += fmt.Sprintf("\n    at %s", frame.FunctionName)
-						}
-						if frame.URL != "" {
-							if frame.FunctionName != "" {
-								message += fmt.Sprintf(" (%s:%d:%d)", frame.URL, frame.LineNumber+1, frame.ColumnNumber+1)
-							} else {
-								message += fmt.Sprintf("\n    at %s:%d:%d", frame.URL, frame.LineNumber+1, frame.ColumnNumber+1)
-							}
-						}
-					}
-					if i != len(ev.ExceptionDetails.StackTrace.CallFrames)-1 || ev.ExceptionDetails.StackTrace.Parent != nil {
-						continue
-					}
-					parent := ev.ExceptionDetails.StackTrace.Parent
-					if len(parent.CallFrames) == 0 {
-						continue
-					}
-					for _, parentFrame := range parent.CallFrames {
-						if parentFrame.URL == "" && parentFrame.FunctionName == "" {
-							continue
-						}
-						if parentFrame.FunctionName != "" {
-							message += fmt.Sprintf("\n    at %s", parentFrame.FunctionName)
-						}
-						if parentFrame.URL != "" {
-							if parentFrame.FunctionName != "" {
-								message += fmt.Sprintf(" (%s:%d:%d)", parentFrame.URL, parentFrame.LineNumber+1, parentFrame.ColumnNumber+1)
-							} else {
-								message += fmt.Sprintf("\n    at %s:%d:%d", parentFrame.URL, parentFrame.LineNumber+1, parentFrame.ColumnNumber+1)
-							}
+					message += formatFrame(frame)
+					if i == len(ev.ExceptionDetails.StackTrace.CallFrames)-1 && ev.ExceptionDetails.StackTrace.Parent != nil {
+						parent := ev.ExceptionDetails.StackTrace.Parent
+						for _, parentFrame := range parent.CallFrames {
+							message += formatFrame(parentFrame)
 						}
 					}
 				}
@@ -503,25 +493,8 @@ func ProcessLogEvent(ev interface{}, handlers *EventHandlers) {
 		if message == "" {
 			message = "Unhandled JavaScript exception"
 		}
-		if ev.ExceptionDetails != nil {
-			var locationKey string
-			if ev.ExceptionDetails.URL != "" {
-				locationKey = ev.ExceptionDetails.URL + ":" + fmt.Sprintf("%d", ev.ExceptionDetails.LineNumber+1)
-				exceptionMessages.Store(locationKey, true)
-			} else if ev.ExceptionDetails.StackTrace != nil && len(ev.ExceptionDetails.StackTrace.CallFrames) > 0 {
-				frame := ev.ExceptionDetails.StackTrace.CallFrames[0]
-				if frame.URL != "" {
-					locationKey = frame.URL + ":" + fmt.Sprintf("%d", frame.LineNumber+1)
-					exceptionMessages.Store(locationKey, true)
-				}
-			}
-		}
-		handlers.OnLog(LogEntry{
-			Level:   "error",
-			Message: message,
-			Time:    time.Now(),
-			Source:  "browser",
-		})
+		storeExceptionLocation(ev.ExceptionDetails)
+		handlers.OnLog(createLogEntry("error", message, "browser"))
 		return
 	}
 	if ev, ok := ev.(*cdplog.EventEntryAdded); ok {
@@ -532,12 +505,7 @@ func ProcessLogEvent(ev interface{}, handlers *EventHandlers) {
 		if strings.ToUpper(level) == "WARNING" && isJavaScriptException(ev.Entry.Text) {
 			level = "error"
 		}
-		handlers.OnLog(LogEntry{
-			Level:   level,
-			Message: ev.Entry.Text,
-			Time:    time.Now(),
-			Source:  "browser",
-		})
+		handlers.OnLog(createLogEntry(level, ev.Entry.Text, "browser"))
 		return
 	}
 	if ev, ok := ev.(*runtime.EventConsoleAPICalled); ok {
@@ -560,12 +528,7 @@ func ProcessLogEvent(ev interface{}, handlers *EventHandlers) {
 		if strings.ToUpper(level) == "WARNING" && isJavaScriptException(message) {
 			level = "error"
 		}
-		handlers.OnLog(LogEntry{
-			Level:   level,
-			Message: message,
-			Time:    time.Now(),
-			Source:  "console",
-		})
+		handlers.OnLog(createLogEntry(level, message, "console"))
 	}
 }
 

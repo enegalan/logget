@@ -18,81 +18,40 @@ func GenerateHeaders(cfg Config, url string) []string {
 			customHeaderMap[strings.ToLower(key)] = value
 		}
 	}
+	getHeader := func(key, defaultValue string) string {
+		if val, exists := customHeaderMap[strings.ToLower(key)]; exists {
+			return val
+		}
+		return defaultValue
+	}
 	var headers []string
-	if customUA, exists := customHeaderMap["user-agent"]; exists {
-		headers = append(headers, fmt.Sprintf("User-Agent: %s", customUA))
-	} else {
-		headers = append(headers, fmt.Sprintf("User-Agent: %s", cfg.UserAgent))
+	headers = append(headers, fmt.Sprintf("User-Agent: %s", getHeader("user-agent", cfg.UserAgent)))
+	acceptDefault := "*/*"
+	if strings.Contains(url, ".json") || strings.Contains(url, "/api/") || strings.Contains(url, "api.") {
+		acceptDefault = "application/json,text/plain,*/*"
+	} else if strings.Contains(url, ".css") {
+		acceptDefault = "text/css,*/*;q=0.1"
 	}
-	if customAccept, exists := customHeaderMap["accept"]; exists {
-		headers = append(headers, fmt.Sprintf("Accept: %s", customAccept))
-	} else {
-		if strings.Contains(url, ".json") || strings.Contains(url, "/api/") || strings.Contains(url, "api.") {
-			headers = append(headers, "Accept: application/json,text/plain,*/*")
-		} else if strings.Contains(url, ".css") {
-			headers = append(headers, "Accept: text/css,*/*;q=0.1")
-		} else {
-			headers = append(headers, "Accept: */*")
-		}
-	}
-	if customLang, exists := customHeaderMap["accept-language"]; exists {
-		headers = append(headers, fmt.Sprintf("Accept-Language: %s", customLang))
-	} else {
-		headers = append(headers, "Accept-Language: en-US,en;q=0.5")
-	}
-	if customEncoding, exists := customHeaderMap["accept-encoding"]; exists {
-		headers = append(headers, fmt.Sprintf("Accept-Encoding: %s", customEncoding))
-	} else {
-		headers = append(headers, "Accept-Encoding: gzip, deflate")
-	}
-	if customConn, exists := customHeaderMap["connection"]; exists {
-		headers = append(headers, fmt.Sprintf("Connection: %s", customConn))
-	} else {
-		headers = append(headers, "Connection: keep-alive")
-	}
+	headers = append(headers, fmt.Sprintf("Accept: %s", getHeader("accept", acceptDefault)))
+	headers = append(headers, fmt.Sprintf("Accept-Language: %s", getHeader("accept-language", "en-US,en;q=0.5")))
+	headers = append(headers, fmt.Sprintf("Accept-Encoding: %s", getHeader("accept-encoding", "gzip, deflate")))
+	headers = append(headers, fmt.Sprintf("Connection: %s", getHeader("connection", "keep-alive")))
 	if strings.HasPrefix(url, "https://") {
-		if customUpgrade, exists := customHeaderMap["upgrade-insecure-requests"]; exists {
-			headers = append(headers, fmt.Sprintf("Upgrade-Insecure-Requests: %s", customUpgrade))
-		} else {
-			headers = append(headers, "Upgrade-Insecure-Requests: 1")
-		}
-		if customDest, exists := customHeaderMap["sec-fetch-dest"]; exists {
-			headers = append(headers, fmt.Sprintf("Sec-Fetch-Dest: %s", customDest))
-		} else {
-			headers = append(headers, "Sec-Fetch-Dest: document")
-		}
-		if customMode, exists := customHeaderMap["sec-fetch-mode"]; exists {
-			headers = append(headers, fmt.Sprintf("Sec-Fetch-Mode: %s", customMode))
-		} else {
-			headers = append(headers, "Sec-Fetch-Mode: navigate")
-		}
-		if customSite, exists := customHeaderMap["sec-fetch-site"]; exists {
-			headers = append(headers, fmt.Sprintf("Sec-Fetch-Site: %s", customSite))
-		} else {
-			headers = append(headers, "Sec-Fetch-Site: none")
-		}
+		headers = append(headers, fmt.Sprintf("Upgrade-Insecure-Requests: %s", getHeader("upgrade-insecure-requests", "1")))
+		headers = append(headers, fmt.Sprintf("Sec-Fetch-Dest: %s", getHeader("sec-fetch-dest", "document")))
+		headers = append(headers, fmt.Sprintf("Sec-Fetch-Mode: %s", getHeader("sec-fetch-mode", "navigate")))
+		headers = append(headers, fmt.Sprintf("Sec-Fetch-Site: %s", getHeader("sec-fetch-site", "none")))
 	}
-	if customCache, exists := customHeaderMap["cache-control"]; exists {
-		headers = append(headers, fmt.Sprintf("Cache-Control: %s", customCache))
-	} else {
-		headers = append(headers, "Cache-Control: max-age=0")
-	}
-	alreadyProcessedHeaders := map[string]bool{
-		"user-agent":                true,
-		"accept":                    true,
-		"accept-language":           true,
-		"accept-encoding":           true,
-		"connection":                true,
-		"upgrade-insecure-requests": true,
-		"sec-fetch-dest":            true,
-		"sec-fetch-mode":            true,
-		"sec-fetch-site":            true,
-		"cache-control":             true,
+	headers = append(headers, fmt.Sprintf("Cache-Control: %s", getHeader("cache-control", "max-age=0")))
+	processedKeys := map[string]bool{
+		"user-agent": true, "accept": true, "accept-language": true, "accept-encoding": true,
+		"connection": true, "upgrade-insecure-requests": true, "sec-fetch-dest": true,
+		"sec-fetch-mode": true, "sec-fetch-site": true, "cache-control": true,
 	}
 	for _, header := range cfg.Headers {
 		if colonIndex := strings.Index(header, ":"); colonIndex != -1 {
 			key := strings.ToLower(strings.TrimSpace(header[:colonIndex]))
-			if !alreadyProcessedHeaders[key] {
+			if !processedKeys[key] {
 				headers = append(headers, header)
 			}
 		}

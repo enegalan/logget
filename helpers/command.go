@@ -220,50 +220,42 @@ func outputCSVEntry(entry interface{}, cfg Config, headerWritten *bool, tracker 
 	}
 }
 
-func outputLogEntry(le LogEntry, cfg Config, headerWritten *bool, tracker *outputErrorTracker, jsonOutput bool, yamlOutput bool, csvOutput bool, formatter *OutputFormatter, logger *Logger) {
+func outputEntry(entry interface{}, cfg Config, headerWritten *bool, tracker *outputErrorTracker, jsonOutput, yamlOutput, csvOutput bool, formatter *OutputFormatter, logger *Logger, csvFunc func(interface{}, Config, bool) error, csvErrorMsg string, formatFunc func(Config) error) {
 	if jsonOutput {
-		if err := outputJSONEntry(le, cfg); err != nil {
+		if err := outputJSONEntry(entry, cfg); err != nil {
 			tracker.handleError(err, logger, "Failed to write to output file: %v")
 		}
 		return
 	}
 	if yamlOutput {
-		if err := outputYAMLEntry(le, cfg); err != nil {
+		if err := outputYAMLEntry(entry, cfg); err != nil {
 			tracker.handleError(err, logger, "Failed to write to output file: %v")
 		}
 		return
 	}
 	if csvOutput {
-		outputCSVEntry(le, cfg, headerWritten, tracker, func(e interface{}, c Config, h bool) error {
-			return formatter.FormatAndOutputLogCSVRow(e.(LogEntry), c, h)
-		}, "Failed to write CSV log row: %v", logger)
+		outputCSVEntry(entry, cfg, headerWritten, tracker, csvFunc, csvErrorMsg, logger)
 		return
 	}
-	err := formatter.FormatAndOutputLog(le, cfg)
-	tracker.handleError(err, logger, "Failed to write log entry: %v")
+	tracker.handleError(formatFunc(cfg), logger, "Failed to write entry: %v")
 }
 
-func outputNetworkEntry(ne NetworkEntry, cfg Config, headerWritten *bool, tracker *outputErrorTracker, jsonOutput bool, yamlOutput bool, csvOutput bool, formatter *OutputFormatter, logger *Logger) {
-	if jsonOutput {
-		if err := outputJSONEntry(ne, cfg); err != nil {
-			tracker.handleError(err, logger, "Failed to write to output file: %v")
-		}
-		return
-	}
-	if yamlOutput {
-		if err := outputYAMLEntry(ne, cfg); err != nil {
-			tracker.handleError(err, logger, "Failed to write to output file: %v")
-		}
-		return
-	}
-	if csvOutput {
-		outputCSVEntry(ne, cfg, headerWritten, tracker, func(e interface{}, c Config, h bool) error {
+func outputLogEntry(le LogEntry, cfg Config, headerWritten *bool, tracker *outputErrorTracker, jsonOutput, yamlOutput, csvOutput bool, formatter *OutputFormatter, logger *Logger) {
+	outputEntry(le, cfg, headerWritten, tracker, jsonOutput, yamlOutput, csvOutput, formatter, logger,
+		func(e interface{}, c Config, h bool) error {
+			return formatter.FormatAndOutputLogCSVRow(e.(LogEntry), c, h)
+		},
+		"Failed to write CSV log row: %v",
+		func(c Config) error { return formatter.FormatAndOutputLog(le, c) })
+}
+
+func outputNetworkEntry(ne NetworkEntry, cfg Config, headerWritten *bool, tracker *outputErrorTracker, jsonOutput, yamlOutput, csvOutput bool, formatter *OutputFormatter, logger *Logger) {
+	outputEntry(ne, cfg, headerWritten, tracker, jsonOutput, yamlOutput, csvOutput, formatter, logger,
+		func(e interface{}, c Config, h bool) error {
 			return formatter.FormatAndOutputNetworkCSVRow(e.(NetworkEntry), c, h)
-		}, "Failed to write CSV network row: %v", logger)
-		return
-	}
-	err := formatter.FormatAndOutputNetwork(ne, cfg)
-	tracker.handleError(err, logger, "Failed to write network entry: %v")
+		},
+		"Failed to write CSV network row: %v",
+		func(c Config) error { return formatter.FormatAndOutputNetwork(ne, c) })
 }
 
 func handleNavigationError(err error, responseProtocol, url string, startTime time.Time, verbose bool, logger *Logger) {
@@ -337,18 +329,12 @@ func buildConfig(cmdConfig CommandConfig) Config {
 }
 
 func validateOutputFormats(cmdConfig CommandConfig, logger *Logger) {
+	formats := []bool{cmdConfig.JSONOutput, cmdConfig.YAMLOutput, cmdConfig.CSVOutput, cmdConfig.HAROutput}
 	formatCount := 0
-	if cmdConfig.JSONOutput {
-		formatCount++
-	}
-	if cmdConfig.YAMLOutput {
-		formatCount++
-	}
-	if cmdConfig.CSVOutput {
-		formatCount++
-	}
-	if cmdConfig.HAROutput {
-		formatCount++
+	for _, f := range formats {
+		if f {
+			formatCount++
+		}
 	}
 	if formatCount > 1 {
 		fmt.Println("logget: Only one output format can be specified at a time")
@@ -524,35 +510,31 @@ func FormatUnknownFlag(flag string, isShort bool) string {
 	return "option --" + flag + ": is unknown"
 }
 
+func extractFlagName(flagStr string) string {
+	flagStr = strings.Trim(flagStr, "'\"")
+	if idx := strings.Index(flagStr, " "); idx != -1 {
+		flagStr = flagStr[:idx]
+	}
+	if idx := strings.Index(flagStr, " in"); idx != -1 {
+		flagStr = flagStr[:idx]
+	}
+	return flagStr
+}
+
 func FormatCobraError(err error) string {
 	errStr := err.Error()
 	if strings.Contains(errStr, "unknown flag: --") {
-		flag := strings.TrimPrefix(errStr, "unknown flag: --")
-		if idx := strings.Index(flag, " "); idx != -1 {
-			flag = flag[:idx]
-		}
-		if idx := strings.Index(flag, " in"); idx != -1 {
-			flag = flag[:idx]
-		}
+		flag := extractFlagName(strings.TrimPrefix(errStr, "unknown flag: --"))
 		return FormatUnknownFlag(flag, false)
 	}
 	if strings.Contains(errStr, "unknown shorthand flag: ") {
-		startIdx := strings.Index(errStr, "'")
-		if startIdx != -1 {
-			endIdx := strings.Index(errStr[startIdx+1:], "'")
-			if endIdx != -1 {
-				flag := errStr[startIdx+1 : startIdx+1+endIdx]
+		if startIdx := strings.Index(errStr, "'"); startIdx != -1 {
+			if endIdx := strings.Index(errStr[startIdx+1:], "'"); endIdx != -1 {
+				flag := extractFlagName(errStr[startIdx+1 : startIdx+1+endIdx])
 				return FormatUnknownFlag(flag, true)
 			}
 		}
-		flag := strings.TrimPrefix(errStr, "unknown shorthand flag: ")
-		if idx := strings.Index(flag, " "); idx != -1 {
-			flag = flag[:idx]
-		}
-		if idx := strings.Index(flag, " in"); idx != -1 {
-			flag = flag[:idx]
-		}
-		flag = strings.Trim(flag, "'\"")
+		flag := extractFlagName(strings.TrimPrefix(errStr, "unknown shorthand flag: "))
 		return FormatUnknownFlag(flag, true)
 	}
 	return errStr

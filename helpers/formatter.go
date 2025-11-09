@@ -309,58 +309,34 @@ func (f *OutputFormatter) FormatNetworkCSV(entries []NetworkEntry, includeHeader
 	return buf.String()
 }
 
-func (f *OutputFormatter) FormatAndOutputLogCSVRow(le LogEntry, cfg Config, includeHeader bool) error {
-	csvData := f.formatLogCSVRow(le, includeHeader)
-	if csvData == "" {
-		return nil
-	}
-	return WriteOutput(cfg, csvData)
-}
-
-func (f *OutputFormatter) formatLogCSVRow(le LogEntry, includeHeader bool) string {
+func (f *OutputFormatter) formatAndOutputCSVRow(header []string, row []string, includeHeader bool, cfg Config) error {
 	var buf bytes.Buffer
 	w := csv.NewWriter(&buf)
 	if includeHeader {
-		_ = w.Write([]string{"timestamp", "level", "source", "message"})
+		_ = w.Write(header)
 	}
-	_ = w.Write([]string{le.Time.Format(time.RFC3339), strings.ToUpper(le.Level), le.Source, le.Message})
+	_ = w.Write(row)
 	w.Flush()
-	return buf.String()
+	return WriteOutput(cfg, buf.String())
+}
+
+func (f *OutputFormatter) FormatAndOutputLogCSVRow(le LogEntry, cfg Config, includeHeader bool) error {
+	return f.formatAndOutputCSVRow(
+		[]string{"timestamp", "level", "source", "message"},
+		[]string{le.Time.Format(time.RFC3339), strings.ToUpper(le.Level), le.Source, le.Message},
+		includeHeader, cfg)
 }
 
 func (f *OutputFormatter) FormatAndOutputNetworkCSVRow(ne NetworkEntry, cfg Config, includeHeader bool) error {
-	csvData := f.formatNetworkCSVRow(ne, includeHeader)
-	if csvData == "" {
-		return nil
-	}
-	return WriteOutput(cfg, csvData)
-}
-
-func (f *OutputFormatter) formatNetworkCSVRow(ne NetworkEntry, includeHeader bool) string {
-	var buf bytes.Buffer
-	w := csv.NewWriter(&buf)
-	if includeHeader {
-		_ = w.Write([]string{"timestamp", "method", "url", "status", "resourceType", "mimeType", "size", "duration", "ttfb", "connectTime", "dnsTime", "sslTime", "sendTime", "waitTime", "receiveTime", "error", "errorType"})
-	}
-	_ = w.Write([]string{
-		ne.Timestamp.Format(time.RFC3339),
-		ne.Method,
-		ne.URL,
-		fmt.Sprintf("%d", ne.Status),
-		ne.ResourceType,
-		ne.Type,
-		fmt.Sprintf("%d", ne.Size),
-		fmt.Sprintf("%.2f", ne.Duration),
-		fmt.Sprintf("%.2f", ne.TimeToFirstByte),
-		fmt.Sprintf("%.2f", ne.ConnectTime),
-		fmt.Sprintf("%.2f", ne.DNSLookupTime),
-		fmt.Sprintf("%.2f", ne.SSLTime),
-		fmt.Sprintf("%.2f", ne.SendTime),
-		fmt.Sprintf("%.2f", ne.WaitTime),
-		fmt.Sprintf("%.2f", ne.ReceiveTime),
-		ne.Error,
-		ne.ErrorType,
-	})
-	w.Flush()
-	return buf.String()
+	return f.formatAndOutputCSVRow(
+		[]string{"timestamp", "method", "url", "status", "resourceType", "mimeType", "size", "duration", "ttfb", "connectTime", "dnsTime", "sslTime", "sendTime", "waitTime", "receiveTime", "error", "errorType"},
+		[]string{
+			ne.Timestamp.Format(time.RFC3339), ne.Method, ne.URL, fmt.Sprintf("%d", ne.Status),
+			ne.ResourceType, ne.Type, fmt.Sprintf("%d", ne.Size), fmt.Sprintf("%.2f", ne.Duration),
+			fmt.Sprintf("%.2f", ne.TimeToFirstByte), fmt.Sprintf("%.2f", ne.ConnectTime),
+			fmt.Sprintf("%.2f", ne.DNSLookupTime), fmt.Sprintf("%.2f", ne.SSLTime),
+			fmt.Sprintf("%.2f", ne.SendTime), fmt.Sprintf("%.2f", ne.WaitTime),
+			fmt.Sprintf("%.2f", ne.ReceiveTime), ne.Error, ne.ErrorType,
+		},
+		includeHeader, cfg)
 }
