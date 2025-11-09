@@ -58,10 +58,11 @@ var (
 func main() {
 	log.SetOutput(io.Discard)
 	var rootCmd = &cobra.Command{
-		Use:   "logget [flags] <url>",
-		Short: "Extract logs and network data from web pages",
-		Args:  cobra.ArbitraryArgs,
-		Run:   runLogget,
+		Use:          "logget [flags] <url>",
+		Short:        "Extract logs and network data from web pages",
+		Args:         cobra.ArbitraryArgs,
+		Run:          runLogget,
+		SilenceUsage: true,
 	}
 	rootCmd.Flags().BoolVarP(&showLogs, "logs", "L", false, "Show console logs")
 	rootCmd.Flags().BoolVarP(&showNetwork, "network", "N", false, "Show network requests")
@@ -101,13 +102,25 @@ func main() {
 	rootCmd.Flags().BoolVar(&noRotateFingerprints, "no-rotate-fingerprints", false, "Disable fingerprint rotation (default: enabled)")
 	rootCmd.Flags().Var(&fingerprintInterval, "fingerprint-interval", "Interval in milliseconds for fingerprint rotation")
 	rootCmd.Flags().BoolVar(&harOutput, "har", false, "Output in HAR (HTTP Archive) format")
+	rootCmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
+		errorMsg := helpers.FormatCobraError(err)
+		os.Stderr.WriteString("logget: " + errorMsg + "\n")
+		os.Exit(1)
+		return err
+	})
 	if err := rootCmd.Execute(); err != nil {
-		os.Stderr.WriteString("Error: " + err.Error() + "\n")
+		errorMsg := helpers.FormatCobraError(err)
+		os.Stderr.WriteString("logget: " + errorMsg + "\n")
 		os.Exit(1)
 	}
 }
 
 func runLogget(cmd *cobra.Command, args []string) {
+	if len(args) > 0 && args[0] == "-" {
+		errorMsg := helpers.FormatUnknownFlag("", true)
+		os.Stderr.WriteString("logget: " + errorMsg + "\n")
+		os.Exit(1)
+	}
 	url := ""
 	if len(args) > 0 {
 		url = args[0]

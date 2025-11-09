@@ -58,7 +58,11 @@ func (l *Logger) formatMessage(level LogLevel, format string, args ...interface{
 	message := fmt.Sprintf(format, args...)
 	formattedTimestamp := l.theme.FormatTimestamp(timestamp)
 	formattedLevel := l.theme.FormatLogLevel(levelStr)
-	return fmt.Sprintf("[%s] %s: %s", formattedTimestamp, formattedLevel, message)
+	prefix := ""
+	if level == WARN || level == ERROR || level == FATAL {
+		prefix = "logget: "
+	}
+	return fmt.Sprintf("[%s] %s: %s%s", formattedTimestamp, formattedLevel, prefix, message)
 }
 
 func (l *Logger) Debug(format string, args ...interface{}) {
@@ -141,19 +145,15 @@ func (l *Logger) PrintHeader(version string) {
 }
 
 func (l *Logger) PrintUsage() {
-	usageText := l.theme.Bold("Usage:")
-	fmt.Fprintf(os.Stderr, "%s logget [flags] <url>\n", usageText)
-	helpText := l.theme.Dim("Use 'logget --help' for detailed information")
-	fmt.Fprintf(os.Stderr, "%s\n", helpText)
+	fmt.Fprintf(os.Stderr, "logget: try 'logget --help' for more information\n")
 }
 
 func (l *Logger) PrintError(err error) {
-	errorText := l.theme.Bold("Error:")
-	fmt.Fprintf(os.Stderr, "%s %v\n", errorText, err)
+	fmt.Fprintf(os.Stderr, "logget: %v\n", err)
 }
 
 func (l *Logger) PrintWarning(format string, args ...interface{}) {
 	warningText := l.theme.Bold("Warning:")
 	message := fmt.Sprintf(format, args...)
-	fmt.Fprintf(os.Stderr, "%s %s\n", warningText, message)
+	fmt.Fprintf(os.Stderr, "%s logget: %s\n", warningText, message)
 }

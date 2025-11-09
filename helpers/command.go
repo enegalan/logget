@@ -269,8 +269,8 @@ func outputNetworkEntry(ne NetworkEntry, cfg Config, headerWritten *bool, tracke
 func handleNavigationError(err error, responseProtocol, url string, startTime time.Time, verbose bool, logger *Logger) {
 	if strings.Contains(err.Error(), "ERR_HTTP_RESPONSE_CODE_FAILURE") {
 		if verbose {
-			fmt.Printf("%s Error (navigation failed)\n", responseProtocol)
-			fmt.Printf("Duration: %v\n", time.Since(startTime))
+			fmt.Printf("logget: %s Error (navigation failed)\n", responseProtocol)
+			fmt.Printf("logget: Duration: %v\n", time.Since(startTime))
 			fmt.Println()
 		}
 		logger.Fatal("Navigation failed: %v", err)
@@ -351,7 +351,7 @@ func validateOutputFormats(cmdConfig CommandConfig, logger *Logger) {
 		formatCount++
 	}
 	if formatCount > 1 {
-		fmt.Println("Only one output format can be specified at a time")
+		fmt.Println("logget: Only one output format can be specified at a time")
 		os.Exit(1)
 	}
 }
@@ -515,4 +515,45 @@ func RunLogget(cmdConfig CommandConfig, url string) {
 		Duration: duration,
 	}
 	writeFinalOutput(cfg, output, network, url, startTime, responseProtocol, statusCode, duration, logger, formatter, cmdConfig.JSONOutput, cmdConfig.YAMLOutput, cmdConfig.Verbose, cmdConfig.ShowLogs, cmdConfig.ShowNetwork, requestCaptured, requestHeaders, responseHeaders)
+}
+
+func FormatUnknownFlag(flag string, isShort bool) string {
+	if isShort {
+		return "option -" + flag + ": is unknown"
+	}
+	return "option --" + flag + ": is unknown"
+}
+
+func FormatCobraError(err error) string {
+	errStr := err.Error()
+	if strings.Contains(errStr, "unknown flag: --") {
+		flag := strings.TrimPrefix(errStr, "unknown flag: --")
+		if idx := strings.Index(flag, " "); idx != -1 {
+			flag = flag[:idx]
+		}
+		if idx := strings.Index(flag, " in"); idx != -1 {
+			flag = flag[:idx]
+		}
+		return FormatUnknownFlag(flag, false)
+	}
+	if strings.Contains(errStr, "unknown shorthand flag: ") {
+		startIdx := strings.Index(errStr, "'")
+		if startIdx != -1 {
+			endIdx := strings.Index(errStr[startIdx+1:], "'")
+			if endIdx != -1 {
+				flag := errStr[startIdx+1 : startIdx+1+endIdx]
+				return FormatUnknownFlag(flag, true)
+			}
+		}
+		flag := strings.TrimPrefix(errStr, "unknown shorthand flag: ")
+		if idx := strings.Index(flag, " "); idx != -1 {
+			flag = flag[:idx]
+		}
+		if idx := strings.Index(flag, " in"); idx != -1 {
+			flag = flag[:idx]
+		}
+		flag = strings.Trim(flag, "'\"")
+		return FormatUnknownFlag(flag, true)
+	}
+	return errStr
 }
