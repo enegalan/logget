@@ -212,6 +212,13 @@ func GetResponseStartTime(requestID string) (float64, bool) {
 	return 0, false
 }
 
+func calcTimeDiff(start, end float64) float64 {
+	if start >= 0 && end >= 0 {
+		return end - start
+	}
+	return 0
+}
+
 func BuildNetworkEntryFromEvent(ev *cdpnetwork.EventResponseReceived, requestMethod string, requestTiming *cdpnetwork.ResourceTiming, responseTime float64, requestTime float64) NetworkEntry {
 	response := ev.Response
 	headers := make(map[string]string)
@@ -232,26 +239,14 @@ func BuildNetworkEntryFromEvent(ev *cdpnetwork.EventResponseReceived, requestMet
 		if requestTiming.RequestTime >= 0 {
 			requestStartTime = requestTiming.RequestTime
 		}
-		if requestTiming.DNSStart >= 0 && requestTiming.DNSEnd >= 0 {
-			dnsTime = requestTiming.DNSEnd - requestTiming.DNSStart
-		}
-		if requestTiming.ConnectStart >= 0 && requestTiming.ConnectEnd >= 0 {
-			connectTime = requestTiming.ConnectEnd - requestTiming.ConnectStart
-		}
-		if requestTiming.SslStart >= 0 && requestTiming.SslEnd >= 0 {
-			sslTime = requestTiming.SslEnd - requestTiming.SslStart
-		}
-		if requestTiming.SendStart >= 0 && requestTiming.SendEnd >= 0 {
-			sendTime = requestTiming.SendEnd - requestTiming.SendStart
-		}
-		if requestTiming.SendEnd >= 0 && requestTiming.ReceiveHeadersStart >= 0 {
-			waitTime = requestTiming.ReceiveHeadersStart - requestTiming.SendEnd
-			if requestTiming.SendStart >= 0 && requestTiming.ReceiveHeadersStart >= requestTiming.SendStart {
-				ttfb = requestTiming.ReceiveHeadersStart - requestTiming.SendStart
-			}
-		}
-		if requestTiming.ReceiveHeadersStart >= 0 && requestTiming.ReceiveHeadersEnd >= 0 {
-			receiveTime = requestTiming.ReceiveHeadersEnd - requestTiming.ReceiveHeadersStart
+		dnsTime = calcTimeDiff(requestTiming.DNSStart, requestTiming.DNSEnd)
+		connectTime = calcTimeDiff(requestTiming.ConnectStart, requestTiming.ConnectEnd)
+		sslTime = calcTimeDiff(requestTiming.SslStart, requestTiming.SslEnd)
+		sendTime = calcTimeDiff(requestTiming.SendStart, requestTiming.SendEnd)
+		waitTime = calcTimeDiff(requestTiming.SendEnd, requestTiming.ReceiveHeadersStart)
+		receiveTime = calcTimeDiff(requestTiming.ReceiveHeadersStart, requestTiming.ReceiveHeadersEnd)
+		if requestTiming.SendStart >= 0 && requestTiming.ReceiveHeadersStart >= requestTiming.SendStart {
+			ttfb = requestTiming.ReceiveHeadersStart - requestTiming.SendStart
 		}
 		if requestTiming.ReceiveHeadersEnd >= 0 && requestTiming.RequestTime >= 0 && requestTiming.ReceiveHeadersEnd >= requestTiming.RequestTime {
 			duration = requestTiming.ReceiveHeadersEnd - requestTiming.RequestTime
@@ -289,72 +284,73 @@ func BuildNetworkEntryFromEvent(ev *cdpnetwork.EventResponseReceived, requestMet
 	}
 	total := queuedTime + dnsTime + connectTime + sslTime + sendTime + waitTime + receiveTime
 
-	return NetworkEntry{
-		URL:                          response.URL,
-		Method:                       method,
-		Status:                       int(response.Status),
-		Headers:                      headers,
-		Timestamp:                    time.Now(),
-		Type:                         string(response.MimeType),
-		Size:                         int64(response.EncodedDataLength),
-		ResourceType:                 ev.Type.String(),
-		Duration:                     duration,
-		DurationFormatted:            FormatTiming(duration),
-		TimeToFirstByte:              ttfb,
-		TimeToFirstByteFormatted:     FormatTiming(ttfb),
-		ConnectTime:                  connectTime,
-		ConnectTimeFormatted:         FormatTiming(connectTime),
-		DNSLookupTime:                dnsTime,
-		DNSLookupTimeFormatted:       FormatTiming(dnsTime),
-		SSLTime:                      sslTime,
-		SSLTimeFormatted:             FormatTiming(sslTime),
-		ReceiveTime:                  receiveTime,
-		ReceiveTimeFormatted:         FormatTiming(receiveTime),
-		ContentDownloadTime:          0,
-		ContentDownloadTimeFormatted: "",
-		SendTime:                     sendTime,
-		SendTimeFormatted:            FormatTiming(sendTime),
-		WaitTime:                     waitTime,
-		WaitTimeFormatted:            FormatTiming(waitTime),
-		RequestStartTime:             requestStartTime,
-		RequestStartTimeFormatted:    FormatTiming(requestStartTime),
-		ResponseStartTime:            responseStartTime,
-		ResponseStartTimeFormatted:   FormatTiming(responseStartTime),
-		QueuedTime:                   queuedTime,
-		QueuedTimeFormatted:          FormatTiming(queuedTime),
-		Total:                        total,
-		TotalFormatted:               FormatTiming(total),
+	ne := NetworkEntry{
+		URL:               response.URL,
+		Method:            method,
+		Status:            int(response.Status),
+		Headers:           headers,
+		Timestamp:         time.Now(),
+		Type:              string(response.MimeType),
+		Size:              int64(response.EncodedDataLength),
+		ResourceType:      ev.Type.String(),
+		Duration:          duration,
+		TimeToFirstByte:   ttfb,
+		ConnectTime:       connectTime,
+		DNSLookupTime:     dnsTime,
+		SSLTime:           sslTime,
+		ReceiveTime:       receiveTime,
+		SendTime:          sendTime,
+		WaitTime:          waitTime,
+		RequestStartTime:  requestStartTime,
+		ResponseStartTime: responseStartTime,
+		QueuedTime:        queuedTime,
+		Total:             total,
 	}
+	ne.DurationFormatted = FormatTiming(ne.Duration)
+	ne.TimeToFirstByteFormatted = FormatTiming(ne.TimeToFirstByte)
+	ne.ConnectTimeFormatted = FormatTiming(ne.ConnectTime)
+	ne.DNSLookupTimeFormatted = FormatTiming(ne.DNSLookupTime)
+	ne.SSLTimeFormatted = FormatTiming(ne.SSLTime)
+	ne.ReceiveTimeFormatted = FormatTiming(ne.ReceiveTime)
+	ne.SendTimeFormatted = FormatTiming(ne.SendTime)
+	ne.WaitTimeFormatted = FormatTiming(ne.WaitTime)
+	ne.RequestStartTimeFormatted = FormatTiming(ne.RequestStartTime)
+	ne.ResponseStartTimeFormatted = FormatTiming(ne.ResponseStartTime)
+	ne.QueuedTimeFormatted = FormatTiming(ne.QueuedTime)
+	ne.TotalFormatted = FormatTiming(ne.Total)
+	return ne
 }
 
 func CategorizeError(errorText string) string {
 	errorTextLower := strings.ToLower(errorText)
-	if strings.Contains(errorTextLower, "timeout") || strings.Contains(errorText, "ERR_TIMED_OUT") || strings.Contains(errorText, "ERR_NET_TIMED_OUT") {
-		return "timeout"
-	}
-	if strings.Contains(errorTextLower, "dns") || strings.Contains(errorText, "ERR_NAME_NOT_RESOLVED") || strings.Contains(errorText, "ERR_NAME_RESOLUTION_FAILED") || strings.Contains(errorText, "ERR_DNS_") {
-		return "dns"
-	}
-	if strings.Contains(errorTextLower, "cors") || strings.Contains(errorTextLower, "cross-origin") || strings.Contains(errorText, "ERR_BLOCKED_BY_CLIENT") || (strings.Contains(errorTextLower, "blocked") && strings.Contains(errorTextLower, "origin")) {
+	if strings.Contains(errorTextLower, "blocked") && strings.Contains(errorTextLower, "origin") {
 		return "cors"
 	}
-	if strings.Contains(errorText, "ERR_CONNECTION_REFUSED") {
-		return "connection_refused"
+	errorPatterns := []struct {
+		category string
+		patterns []string
+		useLower bool
+	}{
+		{"timeout", []string{"timeout", "ERR_TIMED_OUT", "ERR_NET_TIMED_OUT"}, false},
+		{"dns", []string{"dns", "ERR_NAME_NOT_RESOLVED", "ERR_NAME_RESOLUTION_FAILED", "ERR_DNS_"}, false},
+		{"cors", []string{"cors", "cross-origin", "ERR_BLOCKED_BY_CLIENT"}, true},
+		{"connection_refused", []string{"ERR_CONNECTION_REFUSED"}, false},
+		{"connection_reset", []string{"ERR_CONNECTION_RESET"}, false},
+		{"connection_closed", []string{"ERR_CONNECTION_CLOSED"}, false},
+		{"network_changed", []string{"ERR_NETWORK_CHANGED"}, false},
+		{"ssl", []string{"ERR_SSL_"}, false},
+		{"certificate", []string{"ERR_CERT_"}, false},
 	}
-	if strings.Contains(errorText, "ERR_CONNECTION_RESET") {
-		return "connection_reset"
-	}
-	if strings.Contains(errorText, "ERR_CONNECTION_CLOSED") {
-		return "connection_closed"
-	}
-	if strings.Contains(errorText, "ERR_NETWORK_CHANGED") {
-		return "network_changed"
-	}
-	if strings.Contains(errorText, "ERR_SSL_") {
-		return "ssl"
-	}
-	if strings.Contains(errorText, "ERR_CERT_") {
-		return "certificate"
+	for _, ep := range errorPatterns {
+		text := errorText
+		if ep.useLower {
+			text = errorTextLower
+		}
+		for _, pattern := range ep.patterns {
+			if strings.Contains(text, pattern) {
+				return ep.category
+			}
+		}
 	}
 	return "unknown"
 }

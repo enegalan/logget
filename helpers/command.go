@@ -356,7 +356,9 @@ func RunLogget(cmdConfig CommandConfig, url string) {
 	}
 	validateOutputFormats(cmdConfig, logger)
 	cfg := buildConfig(cmdConfig)
-	if !cmdConfig.ShowLogs && !cmdConfig.ShowNetwork && !cmdConfig.Verbose && !cmdConfig.JSONOutput && !cmdConfig.YAMLOutput && !cmdConfig.HAROutput && !cmdConfig.FollowMode {
+	hasAnyOutput := cmdConfig.ShowLogs || cmdConfig.ShowNetwork || cmdConfig.Verbose ||
+		cmdConfig.JSONOutput || cmdConfig.YAMLOutput || cmdConfig.HAROutput || cmdConfig.FollowMode
+	if !hasAnyOutput {
 		logger.PrintUsage()
 		os.Exit(0)
 	}
