@@ -7,38 +7,53 @@ import (
 
 var fileWriteState = make(map[string]bool)
 
-func WriteOutput(cfg Config, content string) error {
-	if cfg.OutputFile != "" {
-		filePath := cfg.OutputFile
-		var file *os.File
-		var err error
-		if cfg.FollowMode {
-			firstWrite := !fileWriteState[filePath]
-			if firstWrite && !cfg.AppendMode {
-				file, err = os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-				fileWriteState[filePath] = true
-			} else {
-				file, err = os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-			}
-		} else if cfg.AppendMode {
-			file, err = os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-		} else {
-			if _, err := os.Stat(filePath); err == nil {
-				file, err = os.OpenFile(filePath, os.O_WRONLY|os.O_TRUNC, 0644)
-			} else {
-				file, err = os.Create(filePath)
-			}
+func getFileOpenFlags(cfg Config, filePath string) (int, error) {
+	if cfg.FollowMode {
+		firstWrite := !fileWriteState[filePath]
+		if firstWrite && !cfg.AppendMode {
+			fileWriteState[filePath] = true
+			return os.O_CREATE | os.O_WRONLY | os.O_TRUNC, nil
 		}
+		return os.O_CREATE | os.O_WRONLY | os.O_APPEND, nil
+	}
+	if cfg.AppendMode {
+		return os.O_CREATE | os.O_WRONLY | os.O_APPEND, nil
+	}
+	if _, err := os.Stat(filePath); err == nil {
+		return os.O_WRONLY | os.O_TRUNC, nil
+	}
+	return 0, os.ErrNotExist
+}
+
+func WriteOutput(cfg Config, content string) error {
+	if cfg.OutputFile == "" {
+		fmt.Print(content)
+		return nil
+	}
+	filePath := cfg.OutputFile
+	flags, flagErr := getFileOpenFlags(cfg, filePath)
+	if flagErr == os.ErrNotExist {
+		file, err := os.Create(filePath)
 		if err != nil {
-			return fmt.Errorf("failed to open output file: %v", err)
+			return fmt.Errorf("failed to create output file: %v", err)
 		}
 		defer file.Close()
-		if _, err = file.WriteString(content); err != nil {
+		if _, err := file.WriteString(content); err != nil {
 			return fmt.Errorf("failed to write to output file: %v", err)
 		}
 		return nil
 	}
-	fmt.Print(content)
+	if flagErr != nil {
+		return fmt.Errorf("failed to determine file flags: %v", flagErr)
+	}
+	file, err := os.OpenFile(filePath, flags, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to open output file: %v", err)
+	}
+	defer file.Close()
+	if _, err := file.WriteString(content); err != nil {
+		return fmt.Errorf("failed to write to output file: %v", err)
+	}
 	return nil
 }
 

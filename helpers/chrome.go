@@ -355,24 +355,25 @@ func CategorizeError(errorText string) string {
 	return "unknown"
 }
 
-func BuildNetworkEntryFromErrorEvent(ev *cdpnetwork.EventLoadingFailed, requestMethod string, requestURL string) NetworkEntry {
-	method := requestMethod
+func getDefaultMethod(method string) string {
 	if method == "" {
-		method = "GET"
+		return "GET"
 	}
-	errorText := ev.ErrorText
-	errorType := CategorizeError(errorText)
+	return method
+}
+
+func BuildNetworkEntryFromErrorEvent(ev *cdpnetwork.EventLoadingFailed, requestMethod string, requestURL string) NetworkEntry {
 	return NetworkEntry{
 		URL:          requestURL,
-		Method:       method,
+		Method:       getDefaultMethod(requestMethod),
 		Status:       0,
 		Headers:      make(map[string]string),
 		Timestamp:    time.Now(),
 		Type:         "",
 		Size:         0,
 		ResourceType: ev.Type.String(),
-		Error:        errorText,
-		ErrorType:    errorType,
+		Error:        ev.ErrorText,
+		ErrorType:    CategorizeError(ev.ErrorText),
 	}
 }
 
@@ -581,22 +582,34 @@ func updateEntryContentDownloadTime(entry *NetworkEntry, contentDownloadTime flo
 }
 
 func ProcessNetworkEventLoadingFinished(ev *cdpnetwork.EventLoadingFinished, networkEntriesMap *sync.Map, startTime time.Time, handlers *EventHandlers) {
-	if entryVal, ok := networkEntriesMap.Load(ev.RequestID.String()); ok {
-		loadingFinishedTime := float64(time.Since(startTime).Nanoseconds()) / 1e6
-		if responseStartTimeVal, ok := responseStartTimesMap.Load(ev.RequestID.String()); ok {
-			if responseStartTime, ok := responseStartTimeVal.(float64); ok {
-				contentDownloadTime := loadingFinishedTime - responseStartTime
-				if entry, ok := entryVal.(NetworkEntry); ok {
-					updateEntryContentDownloadTime(&entry, contentDownloadTime)
-					networkEntriesMap.Store(ev.RequestID.String(), entry)
-					if handlers != nil && handlers.OnNetwork != nil {
-						handlers.OnNetwork(entry)
-					}
-				} else if entryPtr, ok := entryVal.(*NetworkEntry); ok {
-					updateEntryContentDownloadTime(entryPtr, contentDownloadTime)
-				}
-			}
-		}
+	entryVal, ok := networkEntriesMap.Load(ev.RequestID.String())
+	if !ok {
+		return
+	}
+	loadingFinishedTime := float64(time.Since(startTime).Nanoseconds()) / 1e6
+	responseStartTimeVal, ok := responseStartTimesMap.Load(ev.RequestID.String())
+	if !ok {
+		return
+	}
+	responseStartTime, ok := responseStartTimeVal.(float64)
+	if !ok {
+		return
+	}
+	contentDownloadTime := loadingFinishedTime - responseStartTime
+	var entry *NetworkEntry
+	switch v := entryVal.(type) {
+	case NetworkEntry:
+		entry = &v
+		updateEntryContentDownloadTime(entry, contentDownloadTime)
+		networkEntriesMap.Store(ev.RequestID.String(), *entry)
+	case *NetworkEntry:
+		entry = v
+		updateEntryContentDownloadTime(entry, contentDownloadTime)
+	default:
+		return
+	}
+	if handlers != nil && handlers.OnNetwork != nil {
+		handlers.OnNetwork(*entry)
 	}
 }
 
