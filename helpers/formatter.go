@@ -185,6 +185,14 @@ func (f *OutputFormatter) FormatAndOutputLog(le LogEntry, cfg Config) error {
 		levelSymbol = "📝"
 	case "TRACE":
 		levelSymbol = "🔍"
+	case "STARTGROUP", "STARTGROUPCOLLAPSED", "ENDGROUP":
+		levelSymbol = "📂"
+	case "DIR", "DIRXML":
+		levelSymbol = "🗂️"
+	case "TABLE":
+		levelSymbol = "📊"
+	case "TIMEEND":
+		levelSymbol = "⏰"
 	default:
 		levelSymbol = "📋"
 	}

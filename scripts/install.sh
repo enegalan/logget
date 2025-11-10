@@ -1,0 +1,196 @@
+#!/bin/bash
+
+### Official Installation script for logget
+# Author: Eneko Galan
+# Date: 2025-11-10
+# Description: This script downloads and installs logget from GitHub Releases
+# Usage: ./scripts/install.sh [version]
+# Example: ./scripts/install.sh 1.0.0
+# Example: ./scripts/install.sh latest
+###
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+COLORS_SH="$SCRIPT_DIR/colors.sh"
+if [ -f "$COLORS_SH" ]; then
+    source "$COLORS_SH"
+fi
+
+BINARY_NAME="logget"
+GITHUB_REPO="enegalan/logget"
+INSTALL_DIR="/usr/local/bin"
+TEMP_DIR=$(mktemp -d)
+
+cleanup() {
+    if [ -d "$TEMP_DIR" ]; then
+        rm -rf "$TEMP_DIR"
+    fi
+}
+trap cleanup EXIT
+
+error_exit() {
+    echo -e "${RED}Error: $1${NC}" >&2
+    exit 1
+}
+
+if [ "$(uname -s)" != "Linux" ]; then
+    error_exit "This script is designed for Linux distributions only"
+fi
+
+detect_arch() {
+    local arch=$(uname -m)
+    case "$arch" in
+        x86_64)
+            echo "amd64"
+            ;;
+        aarch64|arm64)
+            echo "arm64"
+            ;;
+        *)
+            error_exit "Unsupported architecture: $arch"
+            ;;
+    esac
+}
+
+ARCH=$(detect_arch)
+echo -e "${BLUE}Detected architecture: ${GREEN}$ARCH${NC}"
+
+check_dependencies() {
+    local missing_tools=()
+    if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
+        missing_tools+=("curl or wget")
+    fi
+    if ! command -v tar >/dev/null 2>&1; then
+        missing_tools+=("tar")
+    fi
+    if [ ${#missing_tools[@]} -ne 0 ]; then
+        error_exit "Missing required tools: ${missing_tools[*]}"
+    fi
+    if command -v curl >/dev/null 2>&1; then
+        DOWNLOAD_CMD="curl"
+    else
+        DOWNLOAD_CMD="wget"
+    fi
+}
+
+check_dependencies
+
+download_file() {
+    local url=$1
+    local output=$2
+    echo -e "${YELLOW}Downloading from: $url${NC}"
+    if [ "$DOWNLOAD_CMD" = "curl" ]; then
+        if ! curl -fsSL -o "$output" "$url"; then
+            error_exit "Failed to download from $url"
+        fi
+    else
+        if ! wget -q -O "$output" "$url"; then
+            error_exit "Failed to download from $url"
+        fi
+    fi
+}
+
+get_latest_version() {
+    local api_url="https://api.github.com/repos/$GITHUB_REPO/releases/latest"
+    local version
+    echo -e "${YELLOW}Fetching latest version...${NC}"
+    if [ "$DOWNLOAD_CMD" = "curl" ]; then
+        version=$(curl -fsSL "$api_url" | grep -o '"tag_name": "[^"]*' | grep -o '[0-9]\+\.[0-9]\+' | head -1)
+    else
+        version=$(wget -q -O - "$api_url" | grep -o '"tag_name": "[^"]*' | grep -o '[0-9]\+\.[0-9]\+' | head -1)
+    fi
+    if [ -z "$version" ]; then
+        error_exit "Failed to fetch latest version from GitHub"
+    fi
+    echo "$version"
+}
+
+validate_version() {
+    local version=$1
+    local url="https://github.com/$GITHUB_REPO/releases/download/v$version/logget-$version-linux-$ARCH.tar.gz"
+    local status_code
+    if [ "$DOWNLOAD_CMD" = "curl" ]; then
+        status_code=$(curl -s -o /dev/null -w "%{http_code}" "$url" || echo "000")
+    else
+        if wget --spider -q "$url" 2>/dev/null; then
+            status_code="200"
+        else
+            status_code="404"
+        fi
+    fi
+    if [ "$status_code" != "200" ]; then
+        error_exit "Version $version not found or not available for linux-$ARCH"
+    fi
+}
+
+# Determine version to install
+VERSION=${1:-""}
+if [ -z "$VERSION" ]; then
+    VERSION=$(get_latest_version)
+    echo -e "${BLUE}Installing latest version: ${GREEN}$VERSION${NC}"
+else
+    echo -e "${BLUE}Installing version: ${GREEN}$VERSION${NC}"
+    validate_version "$VERSION"
+fi
+
+# Construct download URL
+DOWNLOAD_URL="https://github.com/$GITHUB_REPO/releases/download/v$VERSION/logget-$VERSION-linux-$ARCH.tar.gz"
+ARCHIVE_NAME="logget-$VERSION-linux-$ARCH.tar.gz"
+ARCHIVE_PATH="$TEMP_DIR/$ARCHIVE_NAME"
+
+# Download archive
+download_file "$DOWNLOAD_URL" "$ARCHIVE_PATH"
+
+# Verify download
+if [ ! -f "$ARCHIVE_PATH" ] || [ ! -s "$ARCHIVE_PATH" ]; then
+    error_exit "Downloaded file is empty or missing"
+fi
+
+# Extract archive
+echo -e "${YELLOW}Extracting archive...${NC}"
+cd "$TEMP_DIR"
+if ! tar -xzf "$ARCHIVE_PATH"; then
+    error_exit "Failed to extract archive"
+fi
+
+# Find the binary
+BINARY_PATH="$TEMP_DIR/logget-linux-$ARCH"
+if [ ! -f "$BINARY_PATH" ]; then
+    error_exit "Binary not found in archive: logget-linux-$ARCH"
+fi
+
+# Set executable permissions
+chmod +x "$BINARY_PATH"
+
+# Check if logget is already installed
+if [ -f "$INSTALL_DIR/$BINARY_NAME" ]; then
+    echo -e "${YELLOW}logget is already installed at $INSTALL_DIR/$BINARY_NAME${NC}"
+    read -p "Do you want to overwrite it? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo -e "${YELLOW}Installation cancelled${NC}"
+        exit 0
+    fi
+fi
+
+# Install binary
+echo -e "${YELLOW}Installing to $INSTALL_DIR/$BINARY_NAME...${NC}"
+if ! sudo cp "$BINARY_PATH" "$INSTALL_DIR/$BINARY_NAME"; then
+    error_exit "Failed to install binary (sudo required)"
+fi
+
+if ! sudo chmod +x "$INSTALL_DIR/$BINARY_NAME"; then
+    error_exit "Failed to set executable permissions"
+fi
+
+# Verify installation
+if [ -f "$INSTALL_DIR/$BINARY_NAME" ] && [ -x "$INSTALL_DIR/$BINARY_NAME" ]; then
+    INSTALLED_VERSION=$("$INSTALL_DIR/$BINARY_NAME" --version 2>/dev/null || echo "unknown")
+    echo -e "${GREEN}Installation complete!${NC}"
+    echo -e "${BLUE}Installed version: ${GREEN}$INSTALLED_VERSION${NC}"
+    echo -e "${BLUE}Binary location: ${GREEN}$INSTALL_DIR/$BINARY_NAME${NC}"
+else
+    error_exit "Installation verification failed"
+fi
