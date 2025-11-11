@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Auto-generated from helpers/colors.go
+# Auto-generated from src/colors.go
 # DO NOT EDIT MANUALLY - Run 'make generate-colors' or './scripts/generate_colors.sh'
 
 NC="\033[0m"

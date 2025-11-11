@@ -1,7 +1,7 @@
 package flags
 
 import (
-	"logget/helpers"
+	helpers "logget/src"
 	"strings"
 )
 

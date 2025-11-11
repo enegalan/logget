@@ -1,13 +1,13 @@
 #!/bin/bash
 
-# Generate colors.sh from helpers/colors.go
+# Generate colors.sh from src/colors.go
 # This ensures both files use the same color definitions
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-COLORS_GO="$PROJECT_ROOT/helpers/colors.go"
+COLORS_GO="$PROJECT_ROOT/src/colors.go"
 COLORS_SH="$SCRIPT_DIR/colors.sh"
 
 if [ ! -f "$COLORS_GO" ]; then
@@ -18,7 +18,7 @@ fi
 cat > "$COLORS_SH" << 'HEADER'
 #!/bin/bash
 
-# Auto-generated from helpers/colors.go
+# Auto-generated from src/colors.go
 # DO NOT EDIT MANUALLY - Run 'make generate-colors' or './scripts/generate_colors.sh'
 
 HEADER

@@ -5,7 +5,7 @@ set -e
 TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$TEST_DIR/.." && pwd)"
 
-COLORS_GO="$PROJECT_ROOT/helpers/colors.go"
+COLORS_GO="$PROJECT_ROOT/src/colors.go"
 COLORS_SH="$PROJECT_ROOT/scripts/colors.sh"
 if [ ! -f "$COLORS_SH" ] || [ "$COLORS_GO" -nt "$COLORS_SH" ]; then
     "$PROJECT_ROOT/scripts/generate_colors.sh"

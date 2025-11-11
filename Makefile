@@ -73,7 +73,7 @@ release:
 	@cd scripts && ./release.sh
 
 generate-colors:
-	@echo "Generating colors.sh from helpers/colors.go..."
+	@echo "Generating colors.sh from src/colors.go..."
 	@./scripts/generate_colors.sh
 
 help:
@@ -86,5 +86,5 @@ help:
 	@echo "  install         - Install binary to system"
 	@echo "  uninstall       - Remove binary from system"
 	@echo "  release         - Create release packages (ZIP and TAR.GZ)"
-	@echo "  generate-colors - Generate scripts/colors.sh from helpers/colors.go"
+	@echo "  generate-colors - Generate scripts/colors.sh from src/colors.go"
 	@echo "  help            - Show this help"

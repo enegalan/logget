@@ -3,8 +3,8 @@ package main
 import (
 	"io"
 	"log"
-	helpers "logget/helpers"
-	"logget/helpers/flags"
+	helpers "logget/src"
+	"logget/src/flags"
 	"os"
 
 	"github.com/spf13/cobra"
