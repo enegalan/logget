@@ -4,9 +4,10 @@
 # Author: Eneko Galan
 # Date: 2025-11-10
 # Description: This script downloads and installs logget from GitHub Releases
-# Usage: ./scripts/install.sh [version]
+# Usage: ./scripts/install.sh [version|--uninstall|-u]
 # Example: ./scripts/install.sh 1.0.0
 # Example: ./scripts/install.sh latest
+# Example: ./scripts/install.sh --uninstall
 ###
 
 set -e
@@ -34,6 +35,26 @@ error_exit() {
     echo -e "${RED}Error: $1${NC}" >&2
     exit 1
 }
+
+uninstall_logget() {
+    echo -e "${YELLOW}Uninstalling $BINARY_NAME from $INSTALL_DIR...${NC}"
+    if [ -f "$INSTALL_DIR/$BINARY_NAME" ]; then
+        if sudo rm -f "$INSTALL_DIR/$BINARY_NAME"; then
+            echo -e "${GREEN}Uninstallation complete!${NC}"
+            echo -e "${BLUE}Removed: ${GREEN}$INSTALL_DIR/$BINARY_NAME${NC}"
+        else
+            error_exit "Failed to remove binary (sudo required)"
+        fi
+    else
+        echo -e "${YELLOW}$BINARY_NAME is not installed in $INSTALL_DIR${NC}"
+        exit 0
+    fi
+}
+
+if [ "$1" = "--uninstall" ] || [ "$1" = "-u" ]; then
+    uninstall_logget
+    exit 0
+fi
 
 if [ "$(uname -s)" != "Linux" ]; then
     error_exit "This script is designed for Linux distributions only"
@@ -95,7 +116,7 @@ download_file() {
 get_latest_version() {
     local api_url="https://api.github.com/repos/$GITHUB_REPO/releases/latest"
     local version
-    echo -e "${YELLOW}Fetching latest version...${NC}"
+    echo -e "${YELLOW}Fetching latest version...${NC}" >&2
     if [ "$DOWNLOAD_CMD" = "curl" ]; then
         version=$(curl -fsSL "$api_url" | grep -o '"tag_name": "[^"]*' | grep -o '[0-9]\+\.[0-9]\+' | head -1)
     else
