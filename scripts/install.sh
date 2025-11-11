@@ -56,9 +56,20 @@ if [ "$1" = "--uninstall" ] || [ "$1" = "-u" ]; then
     exit 0
 fi
 
-if [ "$(uname -s)" != "Linux" ]; then
-    error_exit "This script is designed for Linux distributions only"
-fi
+detect_os() {
+    local os=$(uname -s)
+    case "$os" in
+        Linux)
+            echo "linux"
+            ;;
+        Darwin)
+            echo "darwin"
+            ;;
+        *)
+            error_exit "Unsupported operating system: $os. This script supports Linux and macOS only"
+            ;;
+    esac
+}
 
 detect_arch() {
     local arch=$(uname -m)
@@ -75,7 +86,9 @@ detect_arch() {
     esac
 }
 
+OS=$(detect_os)
 ARCH=$(detect_arch)
+echo -e "${BLUE}Detected OS: ${GREEN}$OS${NC}"
 echo -e "${BLUE}Detected architecture: ${GREEN}$ARCH${NC}"
 
 check_dependencies() {
@@ -118,9 +131,9 @@ get_latest_version() {
     local version
     echo -e "${YELLOW}Fetching latest version...${NC}" >&2
     if [ "$DOWNLOAD_CMD" = "curl" ]; then
-        version=$(curl -fsSL "$api_url" | grep -o '"tag_name": "[^"]*' | grep -o '[0-9]\+\.[0-9]\+' | head -1)
+        version=$(curl -fsSL "$api_url" | grep -o '"tag_name": "[^"]*' | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+' | head -1)
     else
-        version=$(wget -q -O - "$api_url" | grep -o '"tag_name": "[^"]*' | grep -o '[0-9]\+\.[0-9]\+' | head -1)
+        version=$(wget -q -O - "$api_url" | grep -o '"tag_name": "[^"]*' | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+' | head -1)
     fi
     if [ -z "$version" ]; then
         error_exit "Failed to fetch latest version from GitHub"
@@ -130,7 +143,7 @@ get_latest_version() {
 
 validate_version() {
     local version=$1
-    local url="https://github.com/$GITHUB_REPO/releases/download/v$version/logget-$version-linux-$ARCH.tar.gz"
+    local url="https://github.com/$GITHUB_REPO/releases/download/v$version/logget-$version-$OS-$ARCH.tar.gz"
     local status_code
     if [ "$DOWNLOAD_CMD" = "curl" ]; then
         status_code=$(curl -s -o /dev/null -w "%{http_code}" "$url" || echo "000")
@@ -142,7 +155,7 @@ validate_version() {
         fi
     fi
     if [ "$status_code" != "200" ]; then
-        error_exit "Version $version not found or not available for linux-$ARCH"
+        error_exit "Version $version not found or not available for $OS-$ARCH"
     fi
 }
 
@@ -157,8 +170,8 @@ else
 fi
 
 # Construct download URL
-DOWNLOAD_URL="https://github.com/$GITHUB_REPO/releases/download/v$VERSION/logget-$VERSION-linux-$ARCH.tar.gz"
-ARCHIVE_NAME="logget-$VERSION-linux-$ARCH.tar.gz"
+DOWNLOAD_URL="https://github.com/$GITHUB_REPO/releases/download/v$VERSION/logget-$VERSION-$OS-$ARCH.tar.gz"
+ARCHIVE_NAME="logget-$VERSION-$OS-$ARCH.tar.gz"
 ARCHIVE_PATH="$TEMP_DIR/$ARCHIVE_NAME"
 
 # Download archive
@@ -177,9 +190,9 @@ if ! tar -xzf "$ARCHIVE_PATH"; then
 fi
 
 # Find the binary
-BINARY_PATH="$TEMP_DIR/logget-linux-$ARCH"
+BINARY_PATH="$TEMP_DIR/logget-$OS-$ARCH"
 if [ ! -f "$BINARY_PATH" ]; then
-    error_exit "Binary not found in archive: logget-linux-$ARCH"
+    error_exit "Binary not found in archive: logget-$OS-$ARCH"
 fi
 
 # Set executable permissions
