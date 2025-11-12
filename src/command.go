@@ -298,7 +298,7 @@ func setupNetworkHandlerForResponse(evResp *cdpnetwork.EventResponseReceived, ha
 }
 
 func buildConfig(cmdConfig CommandConfig) Config {
-	return Config{
+	cfg := Config{
 		UserAgent:           cmdConfig.UserAgent,
 		Headers:             cmdConfig.Headers,
 		Cookies:             cmdConfig.Cookies,
@@ -330,6 +330,22 @@ func buildConfig(cmdConfig CommandConfig) Config {
 		FingerprintInterval: cmdConfig.FingerprintInterval,
 		HAROutput:           cmdConfig.HAROutput,
 	}
+	if cmdConfig.StatusPattern != "" {
+		if r, err := regexp.Compile(cmdConfig.StatusPattern); err == nil {
+			cfg.StatusRegex = r
+		}
+	}
+	if cmdConfig.DomainPattern != "" {
+		if r, err := regexp.Compile(cmdConfig.DomainPattern); err == nil {
+			cfg.DomainRegex = r
+		}
+	}
+	if cmdConfig.MimePattern != "" {
+		if r, err := regexp.Compile(cmdConfig.MimePattern); err == nil {
+			cfg.MimeRegex = r
+		}
+	}
+	return cfg
 }
 
 func validateOutputFormats(cmdConfig CommandConfig) {
@@ -380,8 +396,8 @@ func RunLogget(cmdConfig CommandConfig, url string) {
 		initialProtocol = "HTTP/1.1"
 		initialStatusCode = 200
 	}
-	var logs []LogEntry
-	var network []NetworkEntry
+	logs := make([]LogEntry, 0, 100)
+	network := make([]NetworkEntry, 0, 500)
 	var responseProtocol string = initialProtocol
 	var responseStatusCode int = initialStatusCode
 	responseHeaders := make(map[string]string)
@@ -462,6 +478,14 @@ func RunLogget(cmdConfig CommandConfig, url string) {
 	}
 	if cmdConfig.FollowMode {
 		prepareOutputFile(cfg, url, logger)
+		if cfg.OutputFile != "" {
+			outputWriter, err := NewOutputWriter(cfg.OutputFile, cfg.AppendMode)
+			if err != nil {
+				logger.Fatal("Failed to create output writer: %v", err)
+			}
+			cfg.OutputWriter = outputWriter
+			defer outputWriter.Close()
+		}
 		filterRegex, excludeRegex := compileRegexPatterns(cmdConfig.FilterPattern, cmdConfig.ExcludePattern)
 		headerWrittenLogs := false
 		headerWrittenNet := false

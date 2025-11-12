@@ -42,7 +42,7 @@ func GetChromeOptions(skipSSLVerify bool) []chromedp.ExecAllocatorOption {
 }
 
 func ConvertEventHeaders(headersMap map[string]interface{}) map[string]string {
-	headers := make(map[string]string)
+	headers := make(map[string]string, len(headersMap))
 	for name, value := range headersMap {
 		if str, ok := value.(string); ok {
 			headers[name] = str
@@ -122,10 +122,13 @@ func ShouldIncludeNetworkEvent(cfg Config, ev *cdpnetwork.EventResponseReceived)
 		}
 	}
 	patternChecks := []struct {
-		pattern string
-		check   func() bool
+		regex *regexp.Regexp
+		check func() bool
 	}{
-		{cfg.MimePattern, func() bool {
+		{cfg.MimeRegex, func() bool {
+			if cfg.MimeRegex == nil {
+				return true
+			}
 			if ev.Response == nil {
 				return false
 			}
@@ -135,34 +138,32 @@ func ShouldIncludeNetworkEvent(cfg Config, ev *cdpnetwork.EventResponseReceived)
 					mimeCandidate = strings.ToLower(s)
 				}
 			}
-			if r, err := regexp.Compile(cfg.MimePattern); err == nil {
-				return r.MatchString(mimeCandidate)
-			}
-			return false
+			return cfg.MimeRegex.MatchString(mimeCandidate)
 		}},
-		{cfg.StatusPattern, func() bool {
+		{cfg.StatusRegex, func() bool {
+			if cfg.StatusRegex == nil {
+				return true
+			}
 			if ev.Response == nil {
 				return false
 			}
-			if r, err := regexp.Compile(cfg.StatusPattern); err == nil {
-				return r.MatchString(fmt.Sprintf("%d", int(ev.Response.Status)))
-			}
-			return false
+			return cfg.StatusRegex.MatchString(fmt.Sprintf("%d", int(ev.Response.Status)))
 		}},
-		{cfg.DomainPattern, func() bool {
+		{cfg.DomainRegex, func() bool {
+			if cfg.DomainRegex == nil {
+				return true
+			}
 			if ev.Response == nil {
 				return false
 			}
 			if u, err := neturl.Parse(ev.Response.URL); err == nil {
-				if r, err := regexp.Compile(cfg.DomainPattern); err == nil {
-					return r.MatchString(u.Hostname())
-				}
+				return cfg.DomainRegex.MatchString(u.Hostname())
 			}
 			return false
 		}},
 	}
 	for _, pc := range patternChecks {
-		if pc.pattern != "" && !pc.check() {
+		if pc.regex != nil && !pc.check() {
 			return false
 		}
 	}
@@ -296,18 +297,6 @@ func BuildNetworkEntryFromEvent(ev *cdpnetwork.EventResponseReceived, requestMet
 		QueuedTime:        queuedTime,
 		Total:             total,
 	}
-	ne.DurationFormatted = FormatTiming(ne.Duration)
-	ne.TimeToFirstByteFormatted = FormatTiming(ne.TimeToFirstByte)
-	ne.ConnectTimeFormatted = FormatTiming(ne.ConnectTime)
-	ne.DNSLookupTimeFormatted = FormatTiming(ne.DNSLookupTime)
-	ne.SSLTimeFormatted = FormatTiming(ne.SSLTime)
-	ne.ReceiveTimeFormatted = FormatTiming(ne.ReceiveTime)
-	ne.SendTimeFormatted = FormatTiming(ne.SendTime)
-	ne.WaitTimeFormatted = FormatTiming(ne.WaitTime)
-	ne.RequestStartTimeFormatted = FormatTiming(ne.RequestStartTime)
-	ne.ResponseStartTimeFormatted = FormatTiming(ne.ResponseStartTime)
-	ne.QueuedTimeFormatted = FormatTiming(ne.QueuedTime)
-	ne.TotalFormatted = FormatTiming(ne.Total)
 	return ne
 }
 
@@ -561,13 +550,10 @@ func ProcessNetworkEventResponseReceived(ev *cdpnetwork.EventResponseReceived, c
 
 func updateEntryContentDownloadTime(entry *NetworkEntry, contentDownloadTime float64) {
 	entry.ContentDownloadTime = contentDownloadTime
-	entry.ContentDownloadTimeFormatted = FormatTiming(entry.ContentDownloadTime)
 	if entry.Duration > 0 && entry.ContentDownloadTime > 0 {
 		entry.Duration = entry.Duration + entry.ContentDownloadTime
-		entry.DurationFormatted = FormatTiming(entry.Duration)
 	}
 	entry.Total = entry.Total + entry.ContentDownloadTime
-	entry.TotalFormatted = FormatTiming(entry.Total)
 }
 
 func ProcessNetworkEventLoadingFinished(ev *cdpnetwork.EventLoadingFinished, networkEntriesMap *sync.Map, startTime time.Time, handlers *EventHandlers) {

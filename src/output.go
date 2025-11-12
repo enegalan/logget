@@ -3,9 +3,56 @@ package helpers
 import (
 	"fmt"
 	"os"
+	"sync"
 )
 
 var fileWriteState = make(map[string]bool)
+
+type OutputWriter struct {
+	file   *os.File
+	mu     sync.Mutex
+	closed bool
+}
+
+func NewOutputWriter(filePath string, appendMode bool) (*OutputWriter, error) {
+	var flags int
+	if appendMode {
+		flags = os.O_CREATE | os.O_WRONLY | os.O_APPEND
+	} else {
+		flags = os.O_CREATE | os.O_WRONLY | os.O_TRUNC
+	}
+	file, err := os.OpenFile(filePath, flags, 0644)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open output file: %v", err)
+	}
+	return &OutputWriter{file: file}, nil
+}
+
+func (w *OutputWriter) Write(content string) error {
+	if w == nil || w.closed {
+		return fmt.Errorf("output writer is closed")
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.closed {
+		return fmt.Errorf("output writer is closed")
+	}
+	_, err := w.file.WriteString(content)
+	return err
+}
+
+func (w *OutputWriter) Close() error {
+	if w == nil || w.closed {
+		return nil
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.closed {
+		return nil
+	}
+	w.closed = true
+	return w.file.Close()
+}
 
 func getFileOpenFlags(cfg Config, filePath string) (int, error) {
 	if cfg.FollowMode {
@@ -26,6 +73,9 @@ func getFileOpenFlags(cfg Config, filePath string) (int, error) {
 }
 
 func WriteOutput(cfg Config, content string) error {
+	if cfg.OutputWriter != nil {
+		return cfg.OutputWriter.Write(content)
+	}
 	if cfg.OutputFile == "" {
 		fmt.Print(content)
 		return nil

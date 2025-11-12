@@ -1,5 +1,7 @@
 package helpers
 
+import "regexp"
+
 type Config struct {
 	UserAgent           string
 	Headers             []string
@@ -17,6 +19,10 @@ type Config struct {
 	StatusPattern       string
 	DomainPattern       string
 	MimePattern         string
+	StatusRegex         *regexp.Regexp
+	DomainRegex         *regexp.Regexp
+	MimeRegex           *regexp.Regexp
+	OutputWriter        *OutputWriter
 	XHROnly             bool
 	DocumentOnly        bool
 	CssOnly             bool
