@@ -1,10 +1,5 @@
 # Binaries
 logget
-logget.exe
-*.exe
-*.dll
-*.so
-*.dylib
 
 # Build directory
 build/
@@ -15,20 +10,6 @@ releases/
 # Scripts directory
 scripts/*.tmp
 scripts/*.log
-
-# Test files
-test.html
-
-# Go specific
-*.test
-*.prof
-vendor/
-
-# IDE files
-.vscode/
-.idea/
-*.swp
-*.swo
 
 # OS specific
 .DS_Store
