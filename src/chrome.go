@@ -6,6 +6,7 @@ import (
 	"fmt"
 	neturl "net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -30,6 +31,22 @@ func GetChromeOptions(skipSSLVerify bool) []chromedp.ExecAllocatorOption {
 		chromedp.Flag("ignore-ssl-errors", true),
 		chromedp.Flag("allow-running-insecure-content", true),
 		chromedp.Flag("disable-certificate-verification", true),
+		chromedp.Flag("disable-background-networking", true),
+		chromedp.Flag("disable-background-timer-throttling", true),
+		chromedp.Flag("disable-breakpad", true),
+		chromedp.Flag("disable-client-side-phishing-detection", true),
+		chromedp.Flag("disable-default-apps", true),
+		chromedp.Flag("disable-hang-monitor", true),
+		chromedp.Flag("disable-popup-blocking", true),
+		chromedp.Flag("disable-prompt-on-repost", true),
+		chromedp.Flag("disable-sync", true),
+		chromedp.Flag("disable-translate", true),
+		chromedp.Flag("metrics-recording-only", true),
+		chromedp.Flag("no-first-run", true),
+		chromedp.Flag("safebrowsing-disable-auto-update", true),
+		chromedp.Flag("enable-automation", false),
+		chromedp.Flag("password-store", "basic"),
+		chromedp.Flag("use-mock-keychain", true),
 	)
 	if skipSSLVerify {
 		opts = append(opts,
@@ -147,7 +164,7 @@ func ShouldIncludeNetworkEvent(cfg Config, ev *cdpnetwork.EventResponseReceived)
 			if ev.Response == nil {
 				return false
 			}
-			return cfg.StatusRegex.MatchString(fmt.Sprintf("%d", int(ev.Response.Status)))
+			return cfg.StatusRegex.MatchString(strconv.Itoa(int(ev.Response.Status)))
 		}},
 		{cfg.DomainRegex, func() bool {
 			if cfg.DomainRegex == nil {
@@ -187,9 +204,9 @@ func FormatTiming(ms float64) string {
 		return ""
 	}
 	if ms >= 1000 {
-		return fmt.Sprintf("%.2fs", ms/1000.0)
+		return strconv.FormatFloat(ms/1000.0, 'f', 2, 64) + "s"
 	}
-	return fmt.Sprintf("%.2fms", ms)
+	return strconv.FormatFloat(ms, 'f', 2, 64) + "ms"
 }
 
 var navigationStartTime float64 = -1
@@ -537,13 +554,13 @@ func ProcessNetworkEventResponseReceived(ev *cdpnetwork.EventResponseReceived, c
 	responseTime = float64(time.Since(startTime).Nanoseconds()) / 1e6
 	ne := BuildNetworkEntryFromEvent(ev, method, requestTiming, responseTime, requestStartTime)
 	if ne.ResponseStartTime > 0 {
-		responseStartTimesMap.Store(ev.RequestID.String(), responseTime)
+		responseStartTimesMap.Store(requestID, responseTime)
 	}
 	if handlers != nil && handlers.OnNetwork != nil {
 		handlers.OnNetwork(ne)
 	}
 	if networkEntriesMap != nil {
-		networkEntriesMap.Store(ev.RequestID.String(), ne)
+		networkEntriesMap.Store(requestID, ne)
 	}
 	return &ne
 }
@@ -557,12 +574,13 @@ func updateEntryContentDownloadTime(entry *NetworkEntry, contentDownloadTime flo
 }
 
 func ProcessNetworkEventLoadingFinished(ev *cdpnetwork.EventLoadingFinished, networkEntriesMap *sync.Map, startTime time.Time, handlers *EventHandlers) {
-	entryVal, ok := networkEntriesMap.Load(ev.RequestID.String())
+	requestID := ev.RequestID.String()
+	entryVal, ok := networkEntriesMap.Load(requestID)
 	if !ok {
 		return
 	}
 	loadingFinishedTime := float64(time.Since(startTime).Nanoseconds()) / 1e6
-	responseStartTimeVal, ok := responseStartTimesMap.Load(ev.RequestID.String())
+	responseStartTimeVal, ok := responseStartTimesMap.Load(requestID)
 	if !ok {
 		return
 	}
@@ -576,7 +594,7 @@ func ProcessNetworkEventLoadingFinished(ev *cdpnetwork.EventLoadingFinished, net
 	case NetworkEntry:
 		entry = &v
 		updateEntryContentDownloadTime(entry, contentDownloadTime)
-		networkEntriesMap.Store(ev.RequestID.String(), *entry)
+		networkEntriesMap.Store(requestID, *entry)
 	case *NetworkEntry:
 		entry = v
 		updateEntryContentDownloadTime(entry, contentDownloadTime)
@@ -639,15 +657,17 @@ func StreamLogsRealTime(cfg Config, ctx context.Context, url string, onLog func(
 		OnNetwork: onNet,
 	}
 	chromedp.ListenTarget(chromeCtx, func(ev interface{}) {
-		if cfg.ShowNetwork {
+		showNetwork := cfg.ShowNetwork
+		showLogs := cfg.ShowLogs
+		if showNetwork {
 			if evReq, ok := ev.(*cdpnetwork.EventRequestWillBeSent); ok {
 				ProcessNetworkEventRequestWillBeSent(evReq, &maps.Methods, &maps.URLs, &maps.StartTimes, pageStartTime, handlers)
 			}
 		}
-		if cfg.ShowLogs {
+		if showLogs {
 			ProcessLogEvent(ev, handlers)
 		}
-		if cfg.ShowNetwork {
+		if showNetwork {
 			if evResp, ok := ev.(*cdpnetwork.EventResponseReceived); ok {
 				ProcessNetworkEventResponseReceived(evResp, cfg, &maps.Methods, &maps.StartTimes, pageStartTime, &maps.NetworkEntries, handlers)
 			}

@@ -292,7 +292,7 @@ func setupNetworkHandlerForResponse(evResp *cdpnetwork.EventResponseReceived, ha
 		return
 	}
 	handlers.OnNetwork = func(ne NetworkEntry) {
-		*network = append(*network, NetworkEntry(ne))
+		*network = append(*network, ne)
 		networkEntriesMap.Store(evResp.RequestID.String(), &(*network)[len(*network)-1])
 	}
 }
@@ -421,7 +421,7 @@ func RunLogget(cmdConfig CommandConfig, url string) {
 	handlers := &EventHandlers{
 		OnLog: func(le LogEntry) {
 			if cmdConfig.ShowLogs {
-				logs = append(logs, LogEntry(le))
+				logs = append(logs, le)
 			}
 		},
 		OnNetwork: nil,
@@ -430,6 +430,7 @@ func RunLogget(cmdConfig CommandConfig, url string) {
 			captureVerboseHeaders(headers, reqURL, url, cmdConfig.Verbose, &requestCaptured, &requestHeaders)
 		},
 	}
+	showLogs := cmdConfig.ShowLogs
 	chromedp.ListenTarget(chromeCtx, func(ev interface{}) {
 		if showNetworkOrVerbose {
 			if evReq, ok := ev.(*cdpnetwork.EventRequestWillBeSent); ok {
@@ -442,7 +443,7 @@ func RunLogget(cmdConfig CommandConfig, url string) {
 				}
 			}
 		}
-		if cmdConfig.ShowLogs {
+		if showLogs {
 			ProcessLogEvent(ev, handlers)
 		}
 		if showNetworkOrVerbose {
@@ -461,7 +462,7 @@ func RunLogget(cmdConfig CommandConfig, url string) {
 			if evFailed, ok := ev.(*cdpnetwork.EventLoadingFailed); ok {
 				ne := HandleLoadingFailedEvent(evFailed, &requestMethods, &requestURLs)
 				if ne != nil && cmdConfig.ShowNetwork {
-					network = append(network, NetworkEntry(*ne))
+					network = append(network, *ne)
 				}
 			}
 		}

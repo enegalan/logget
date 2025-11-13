@@ -17,7 +17,7 @@ var (
 	yamlOutput  bool
 	csvOutput   bool
 	timeout     flags.Milliseconds = 60000
-	wait        flags.Milliseconds = 3000
+	wait        flags.Milliseconds = 100
 	userAgent   flags.UserAgent    = "logget/1.0"
 	headers     flags.HeaderArray
 	cookies     flags.CookieArray

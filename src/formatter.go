@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/csv"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -19,67 +20,92 @@ func NewOutputFormatter(colors bool) *OutputFormatter {
 }
 
 func (f *OutputFormatter) FormatHTTPResponse(protocol string, statusCode int, duration time.Duration) string {
-	var sb strings.Builder
-	// Status line
+	sb := strings.Builder{}
+	sb.Grow(128)
 	statusColor := f.theme.GetStatusColor(statusCode)
 	formattedProtocol := f.theme.Bold(protocol)
-	formattedStatusCode := f.theme.Colorize(statusColor, fmt.Sprintf("%d", statusCode))
-	sb.WriteString(fmt.Sprintf("%s %s\n", formattedProtocol, formattedStatusCode))
-	// Duration
+	formattedStatusCode := f.theme.Colorize(statusColor, strconv.Itoa(statusCode))
+	sb.WriteString(formattedProtocol)
+	sb.WriteString(" ")
+	sb.WriteString(formattedStatusCode)
+	sb.WriteString("\n")
 	durationText := f.theme.Colorize(f.theme.Timestamp, fmt.Sprintf("Duration: %v", duration))
-	sb.WriteString(fmt.Sprintf("%s\n", durationText))
+	sb.WriteString(durationText)
+	sb.WriteString("\n")
 	return sb.String()
 }
 
 func (f *OutputFormatter) FormatRequestHeaders(headers []string) string {
-	var sb strings.Builder
+	sb := strings.Builder{}
+	sb.Grow(len(headers) * 64)
 	sectionTitle := f.theme.FormatHeader("REQUEST HEADERS")
-	sb.WriteString(fmt.Sprintf("\n=== %s ===\n", sectionTitle))
+	sb.WriteString("\n=== ")
+	sb.WriteString(sectionTitle)
+	sb.WriteString(" ===\n")
 	for _, header := range headers {
 		formattedHeader := f.theme.Colorize(Yellow, header)
-		sb.WriteString(fmt.Sprintf("%s\n", formattedHeader))
+		sb.WriteString(formattedHeader)
+		sb.WriteString("\n")
 	}
 	return sb.String()
 }
 
 func (f *OutputFormatter) FormatResponseHeaders(headers map[string]string) string {
-	var sb strings.Builder
 	if len(headers) == 0 {
 		return ""
 	}
+	sb := strings.Builder{}
+	sb.Grow(len(headers) * 64)
 	sectionTitle := f.theme.FormatHeader("RESPONSE HEADERS")
-	sb.WriteString(fmt.Sprintf("\n=== %s ===\n", sectionTitle))
+	sb.WriteString("\n=== ")
+	sb.WriteString(sectionTitle)
+	sb.WriteString(" ===\n")
 	for name, value := range headers {
 		formattedName := f.theme.Bold(name)
-		sb.WriteString(fmt.Sprintf("%s: %s\n", formattedName, value))
+		sb.WriteString(formattedName)
+		sb.WriteString(": ")
+		sb.WriteString(value)
+		sb.WriteString("\n")
 	}
 	return sb.String()
 }
 
 func (f *OutputFormatter) FormatConsoleLogs(logs []LogEntry) string {
-	var sb strings.Builder
 	if len(logs) == 0 {
 		return ""
 	}
+	sb := strings.Builder{}
+	sb.Grow(len(logs) * 128)
 	sectionTitle := f.theme.FormatHeader("CONSOLE LOGS")
-	sb.WriteString(fmt.Sprintf("\n=== %s ===\n", sectionTitle))
+	sb.WriteString("\n=== ")
+	sb.WriteString(sectionTitle)
+	sb.WriteString(" ===\n")
 	for _, log := range logs {
 		timestamp := log.Time.Format("15:04:05")
 		level := strings.ToUpper(log.Level)
 		formattedTimestamp := f.theme.FormatTimestamp(timestamp)
 		formattedLevel := f.theme.FormatLogLevel(level)
-		sb.WriteString(fmt.Sprintf("[%s] %s: %s\n", formattedTimestamp, formattedLevel, log.Message))
+		sb.WriteString("[")
+		sb.WriteString(formattedTimestamp)
+		sb.WriteString("] ")
+		sb.WriteString(formattedLevel)
+		sb.WriteString(": ")
+		sb.WriteString(log.Message)
+		sb.WriteString("\n")
 	}
 	return sb.String()
 }
 
 func (f *OutputFormatter) FormatNetworkRequests(network []NetworkEntry) string {
-	var sb strings.Builder
 	if len(network) == 0 {
 		return ""
 	}
+	sb := strings.Builder{}
+	sb.Grow(len(network) * 256)
 	sectionTitle := f.theme.FormatHeader("NETWORK REQUESTS")
-	sb.WriteString(fmt.Sprintf("\n=== %s ===\n", sectionTitle))
+	sb.WriteString("\n=== ")
+	sb.WriteString(sectionTitle)
+	sb.WriteString(" ===\n")
 	for _, net := range network {
 		formattedMethod := f.theme.Bold(net.Method)
 		formattedURL := f.theme.Colorize(Cyan, net.URL)
@@ -94,16 +120,30 @@ func (f *OutputFormatter) FormatNetworkRequests(network []NetworkEntry) string {
 				errorColor = Magenta
 			}
 			formattedError := f.theme.Colorize(errorColor, fmt.Sprintf("ERROR: %s (%s)", net.Error, net.ErrorType))
-			sb.WriteString(fmt.Sprintf("%s %s -> %s\n", formattedMethod, formattedURL, formattedError))
+			sb.WriteString(formattedMethod)
+			sb.WriteString(" ")
+			sb.WriteString(formattedURL)
+			sb.WriteString(" -> ")
+			sb.WriteString(formattedError)
+			sb.WriteString("\n")
 		} else {
 			statusColor := f.theme.GetStatusColor(net.Status)
-			formattedStatus := f.theme.Colorize(statusColor, fmt.Sprintf("%d", net.Status))
-			sb.WriteString(fmt.Sprintf("%s %s -> %s\n", formattedMethod, formattedURL, formattedStatus))
+			formattedStatus := f.theme.Colorize(statusColor, strconv.Itoa(net.Status))
+			sb.WriteString(formattedMethod)
+			sb.WriteString(" ")
+			sb.WriteString(formattedURL)
+			sb.WriteString(" -> ")
+			sb.WriteString(formattedStatus)
+			sb.WriteString("\n")
 		}
 		if len(net.Headers) > 0 {
 			for k, v := range net.Headers {
 				formattedKey := f.theme.Colorize(Yellow, k)
-				sb.WriteString(fmt.Sprintf("  %s: %s\n", formattedKey, v))
+				sb.WriteString("  ")
+				sb.WriteString(formattedKey)
+				sb.WriteString(": ")
+				sb.WriteString(v)
+				sb.WriteString("\n")
 			}
 		}
 		sb.WriteString("\n")
@@ -255,7 +295,7 @@ func (f *OutputFormatter) FormatAndOutputNetwork(ne NetworkEntry, cfg Config) er
 			formattedError)
 	} else {
 		statusColor := f.GetStatusColor(status)
-		formattedStatus := f.Colorize(statusColor, fmt.Sprintf("%d", status))
+		formattedStatus := f.Colorize(statusColor, strconv.Itoa(status))
 		line = fmt.Sprintf("[%s] %s %s %s %s %s\n",
 			formattedTimestamp,
 			formattedPrefix,
@@ -297,18 +337,18 @@ func (f *OutputFormatter) FormatNetworkCSV(entries []NetworkEntry, includeHeader
 			ne.Timestamp.Format(time.RFC3339),
 			ne.Method,
 			ne.URL,
-			fmt.Sprintf("%d", ne.Status),
+			strconv.Itoa(ne.Status),
 			ne.ResourceType,
 			ne.Type,
-			fmt.Sprintf("%d", ne.Size),
-			fmt.Sprintf("%.2f", ne.Duration),
-			fmt.Sprintf("%.2f", ne.TimeToFirstByte),
-			fmt.Sprintf("%.2f", ne.ConnectTime),
-			fmt.Sprintf("%.2f", ne.DNSLookupTime),
-			fmt.Sprintf("%.2f", ne.SSLTime),
-			fmt.Sprintf("%.2f", ne.SendTime),
-			fmt.Sprintf("%.2f", ne.WaitTime),
-			fmt.Sprintf("%.2f", ne.ReceiveTime),
+			strconv.FormatInt(ne.Size, 10),
+			strconv.FormatFloat(ne.Duration, 'f', 2, 64),
+			strconv.FormatFloat(ne.TimeToFirstByte, 'f', 2, 64),
+			strconv.FormatFloat(ne.ConnectTime, 'f', 2, 64),
+			strconv.FormatFloat(ne.DNSLookupTime, 'f', 2, 64),
+			strconv.FormatFloat(ne.SSLTime, 'f', 2, 64),
+			strconv.FormatFloat(ne.SendTime, 'f', 2, 64),
+			strconv.FormatFloat(ne.WaitTime, 'f', 2, 64),
+			strconv.FormatFloat(ne.ReceiveTime, 'f', 2, 64),
 			ne.Error,
 			ne.ErrorType,
 		})
@@ -339,12 +379,12 @@ func (f *OutputFormatter) FormatAndOutputNetworkCSVRow(ne NetworkEntry, cfg Conf
 	return f.formatAndOutputCSVRow(
 		[]string{"timestamp", "method", "url", "status", "resourceType", "mimeType", "size", "duration", "ttfb", "connectTime", "dnsTime", "sslTime", "sendTime", "waitTime", "receiveTime", "error", "errorType"},
 		[]string{
-			ne.Timestamp.Format(time.RFC3339), ne.Method, ne.URL, fmt.Sprintf("%d", ne.Status),
-			ne.ResourceType, ne.Type, fmt.Sprintf("%d", ne.Size), fmt.Sprintf("%.2f", ne.Duration),
-			fmt.Sprintf("%.2f", ne.TimeToFirstByte), fmt.Sprintf("%.2f", ne.ConnectTime),
-			fmt.Sprintf("%.2f", ne.DNSLookupTime), fmt.Sprintf("%.2f", ne.SSLTime),
-			fmt.Sprintf("%.2f", ne.SendTime), fmt.Sprintf("%.2f", ne.WaitTime),
-			fmt.Sprintf("%.2f", ne.ReceiveTime), ne.Error, ne.ErrorType,
+			ne.Timestamp.Format(time.RFC3339), ne.Method, ne.URL, strconv.Itoa(ne.Status),
+			ne.ResourceType, ne.Type, strconv.FormatInt(ne.Size, 10), strconv.FormatFloat(ne.Duration, 'f', 2, 64),
+			strconv.FormatFloat(ne.TimeToFirstByte, 'f', 2, 64), strconv.FormatFloat(ne.ConnectTime, 'f', 2, 64),
+			strconv.FormatFloat(ne.DNSLookupTime, 'f', 2, 64), strconv.FormatFloat(ne.SSLTime, 'f', 2, 64),
+			strconv.FormatFloat(ne.SendTime, 'f', 2, 64), strconv.FormatFloat(ne.WaitTime, 'f', 2, 64),
+			strconv.FormatFloat(ne.ReceiveTime, 'f', 2, 64), ne.Error, ne.ErrorType,
 		},
 		includeHeader, cfg)
 }
