@@ -46,7 +46,7 @@ clean:
 
 test:
 	@echo "Running tests..."
-	@go test -v ./...
+	@cd tests && ./run_tests.sh
 
 deps:
 	@echo "Installing dependencies..."
