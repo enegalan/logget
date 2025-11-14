@@ -133,9 +133,9 @@ func ConvertNetworkEntriesToHAR(entries []NetworkEntry, pageURL string, startTim
 		},
 	}
 	if len(entries) > 0 {
-		var pageDuration float64
-		if entries[0].Duration > 0 {
-			pageDuration = entries[0].Duration
+		pageDuration := entries[0].Duration
+		if pageDuration < 0 {
+			pageDuration = 0
 		}
 		har.Log.Pages = []HARPage{
 			{

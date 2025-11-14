@@ -568,9 +568,9 @@ func ProcessNetworkEventResponseReceived(ev *cdpnetwork.EventResponseReceived, c
 func updateEntryContentDownloadTime(entry *NetworkEntry, contentDownloadTime float64) {
 	entry.ContentDownloadTime = contentDownloadTime
 	if entry.Duration > 0 && entry.ContentDownloadTime > 0 {
-		entry.Duration = entry.Duration + entry.ContentDownloadTime
+		entry.Duration += entry.ContentDownloadTime
 	}
-	entry.Total = entry.Total + entry.ContentDownloadTime
+	entry.Total += entry.ContentDownloadTime
 }
 
 func ProcessNetworkEventLoadingFinished(ev *cdpnetwork.EventLoadingFinished, networkEntriesMap *sync.Map, startTime time.Time, handlers *EventHandlers) {
@@ -607,21 +607,15 @@ func ProcessNetworkEventLoadingFinished(ev *cdpnetwork.EventLoadingFinished, net
 }
 
 func ProcessNetworkEventLoadingFailed(ev *cdpnetwork.EventLoadingFailed, requestMethods *sync.Map, requestURLs *sync.Map, handlers *EventHandlers) {
-	ne := HandleLoadingFailedEvent(ev, requestMethods, requestURLs)
-	if ne != nil && handlers != nil && handlers.OnNetwork != nil {
+	if ne := HandleLoadingFailedEvent(ev, requestMethods, requestURLs); ne != nil && handlers != nil && handlers.OnNetwork != nil {
 		handlers.OnNetwork(*ne)
 	}
 }
 
 func CreateChromeContext(ctx context.Context, skipSSLVerify bool) (context.Context, context.CancelFunc, error) {
-	opts := GetChromeOptions(skipSSLVerify)
-	allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, opts...)
+	allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, GetChromeOptions(skipSSLVerify)...)
 	chromeCtx, chromeCancel := chromedp.NewContext(allocCtx)
-	cancelFunc := func() {
-		chromeCancel()
-		allocCancel()
-	}
-	return chromeCtx, cancelFunc, nil
+	return chromeCtx, func() { chromeCancel(); allocCancel() }, nil
 }
 
 func EnableChromeDomains(ctx context.Context, showLogs, showNetwork bool) error {

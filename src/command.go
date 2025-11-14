@@ -73,9 +73,7 @@ type outputErrorTracker struct {
 }
 
 func newOutputErrorTracker() *outputErrorTracker {
-	return &outputErrorTracker{
-		maxErrors: 5,
-	}
+	return &outputErrorTracker{maxErrors: 5}
 }
 
 func (t *outputErrorTracker) handleError(err error, logger *Logger, message string) {
@@ -349,9 +347,8 @@ func buildConfig(cmdConfig CommandConfig) Config {
 }
 
 func validateOutputFormats(cmdConfig CommandConfig) {
-	formats := []bool{cmdConfig.JSONOutput, cmdConfig.YAMLOutput, cmdConfig.CSVOutput, cmdConfig.HAROutput}
 	formatCount := 0
-	for _, f := range formats {
+	for _, f := range []bool{cmdConfig.JSONOutput, cmdConfig.YAMLOutput, cmdConfig.CSVOutput, cmdConfig.HAROutput} {
 		if f {
 			formatCount++
 		}
@@ -376,8 +373,7 @@ func RunLogget(cmdConfig CommandConfig, url string) {
 	}
 	validateOutputFormats(cmdConfig)
 	cfg := buildConfig(cmdConfig)
-	hasAnyOutput := cmdConfig.ShowLogs || cmdConfig.ShowNetwork || cmdConfig.Verbose ||
-		cmdConfig.JSONOutput || cmdConfig.YAMLOutput || cmdConfig.HAROutput || cmdConfig.FollowMode
+	hasAnyOutput := cmdConfig.ShowLogs || cmdConfig.ShowNetwork || cmdConfig.Verbose || cmdConfig.JSONOutput || cmdConfig.YAMLOutput || cmdConfig.HAROutput || cmdConfig.FollowMode
 	if !hasAnyOutput {
 		logger.PrintUsage()
 		os.Exit(0)
@@ -398,8 +394,7 @@ func RunLogget(cmdConfig CommandConfig, url string) {
 	}
 	logs := make([]LogEntry, 0, 100)
 	network := make([]NetworkEntry, 0, 500)
-	var responseProtocol string = initialProtocol
-	var responseStatusCode int = initialStatusCode
+	responseProtocol, responseStatusCode := initialProtocol, initialStatusCode
 	responseHeaders := make(map[string]string)
 	responseCaptured := false
 	requestHeaders := make(map[string]string)
@@ -556,18 +551,15 @@ func extractFlagName(flagStr string) string {
 func FormatCobraError(err error) string {
 	errStr := err.Error()
 	if strings.Contains(errStr, "unknown flag: --") {
-		flag := extractFlagName(strings.TrimPrefix(errStr, "unknown flag: --"))
-		return FormatUnknownFlag(flag, false)
+		return FormatUnknownFlag(extractFlagName(strings.TrimPrefix(errStr, "unknown flag: --")), false)
 	}
 	if strings.Contains(errStr, "unknown shorthand flag: ") {
 		if startIdx := strings.Index(errStr, "'"); startIdx != -1 {
 			if endIdx := strings.Index(errStr[startIdx+1:], "'"); endIdx != -1 {
-				flag := extractFlagName(errStr[startIdx+1 : startIdx+1+endIdx])
-				return FormatUnknownFlag(flag, true)
+				return FormatUnknownFlag(extractFlagName(errStr[startIdx+1:startIdx+1+endIdx]), true)
 			}
 		}
-		flag := extractFlagName(strings.TrimPrefix(errStr, "unknown shorthand flag: "))
-		return FormatUnknownFlag(flag, true)
+		return FormatUnknownFlag(extractFlagName(strings.TrimPrefix(errStr, "unknown shorthand flag: ")), true)
 	}
 	return errStr
 }

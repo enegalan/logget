@@ -17,7 +17,6 @@ TESTS_PASSED=0
 TESTS_FAILED=0
 TESTS_TOTAL=0
 
-
 if [ ! -f "$BINARY_PATH" ]; then
     echo -e "${RED}Error: logget binary not found at $BINARY_PATH${NC}"
     echo -e "${YELLOW}Please build logget first: go build -o logget .${NC}"
@@ -26,7 +25,6 @@ fi
 
 TEST_URL="https://google.com"
 
-# Function to count expected total tests by analyzing test files
 count_expected_tests() {
     local count=0
     for test_file in "$TEST_DIR"/test__*.sh; do
@@ -124,7 +122,6 @@ run_test_expect_output() {
         return 1
     fi
 }
-
 
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}  logget Test Suite${NC}"

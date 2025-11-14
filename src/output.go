@@ -15,11 +15,11 @@ type OutputWriter struct {
 }
 
 func NewOutputWriter(filePath string, appendMode bool) (*OutputWriter, error) {
-	var flags int
+	flags := os.O_CREATE | os.O_WRONLY
 	if appendMode {
-		flags = os.O_CREATE | os.O_WRONLY | os.O_APPEND
+		flags |= os.O_APPEND
 	} else {
-		flags = os.O_CREATE | os.O_WRONLY | os.O_TRUNC
+		flags |= os.O_TRUNC
 	}
 	file, err := os.OpenFile(filePath, flags, 0644)
 	if err != nil {
@@ -56,8 +56,7 @@ func (w *OutputWriter) Close() error {
 
 func getFileOpenFlags(cfg Config, filePath string) (int, error) {
 	if cfg.FollowMode {
-		firstWrite := !fileWriteState[filePath]
-		if firstWrite && !cfg.AppendMode {
+		if !fileWriteState[filePath] && !cfg.AppendMode {
 			fileWriteState[filePath] = true
 			return os.O_CREATE | os.O_WRONLY | os.O_TRUNC, nil
 		}

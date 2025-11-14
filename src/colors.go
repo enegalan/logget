@@ -235,10 +235,6 @@ func (ct *ColorTheme) FormatHTTPMethod(method string) string {
 	return ct.Colorize(color, method)
 }
 
-func (ct *ColorTheme) FormatNetworkPrefix() string {
-	return ct.Colorize(Bold+Cyan, "NETWORK")
-}
+func (ct *ColorTheme) FormatNetworkPrefix() string { return ct.Colorize(Bold+Cyan, "NETWORK") }
 
-func (ct *ColorTheme) FormatConsolePrefix() string {
-	return ct.Colorize(Bold+Magenta, "CONSOLE")
-}
+func (ct *ColorTheme) FormatConsolePrefix() string { return ct.Colorize(Bold+Magenta, "CONSOLE") }

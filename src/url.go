@@ -20,8 +20,8 @@ func GetHostFromURL(rawURL string) string {
 	} else if strings.HasPrefix(rawURL, "https://") {
 		rawURL = rawURL[8:]
 	}
-	if slashIndex := strings.Index(rawURL, "/"); slashIndex != -1 {
-		return rawURL[:slashIndex]
+	if idx := strings.Index(rawURL, "/"); idx != -1 {
+		return rawURL[:idx]
 	}
 	return rawURL
 }

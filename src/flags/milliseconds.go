@@ -7,10 +7,7 @@ import (
 
 type Milliseconds int
 
-func (m *Milliseconds) String() string {
-	return fmt.Sprintf("%d", *m)
-}
-
+func (m *Milliseconds) String() string { return fmt.Sprintf("%d", *m) }
 func (m *Milliseconds) Set(value string) error {
 	ms, err := strconv.ParseInt(value, 10, 32)
 	if err != nil {
@@ -19,15 +16,6 @@ func (m *Milliseconds) Set(value string) error {
 	*m = Milliseconds(ms)
 	return nil
 }
-
-func (m *Milliseconds) Type() string {
-	return "<milliseconds>"
-}
-
-func (m *Milliseconds) Get() int {
-	return int(*m)
-}
-
-func (m *Milliseconds) Empty() bool {
-	return *m == 0
-}
+func (m *Milliseconds) Type() string { return "<milliseconds>" }
+func (m *Milliseconds) Get() int     { return int(*m) }
+func (m *Milliseconds) Empty() bool  { return *m == 0 }

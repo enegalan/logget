@@ -103,22 +103,19 @@ func main() {
 	rootCmd.Flags().Var(&fingerprintInterval, "fingerprint-interval", "Interval in milliseconds for fingerprint rotation")
 	rootCmd.Flags().BoolVar(&harOutput, "har", false, "Output in HAR (HTTP Archive) format")
 	rootCmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
-		errorMsg := helpers.FormatCobraError(err)
-		os.Stderr.WriteString("logget: " + errorMsg + "\n")
+		os.Stderr.WriteString("logget: " + helpers.FormatCobraError(err) + "\n")
 		os.Exit(1)
 		return err
 	})
 	if err := rootCmd.Execute(); err != nil {
-		errorMsg := helpers.FormatCobraError(err)
-		os.Stderr.WriteString("logget: " + errorMsg + "\n")
+		os.Stderr.WriteString("logget: " + helpers.FormatCobraError(err) + "\n")
 		os.Exit(1)
 	}
 }
 
 func runLogget(cmd *cobra.Command, args []string) {
 	if len(args) > 0 && args[0] == "-" {
-		errorMsg := helpers.FormatUnknownFlag("", true)
-		os.Stderr.WriteString("logget: " + errorMsg + "\n")
+		os.Stderr.WriteString("logget: " + helpers.FormatUnknownFlag("", true) + "\n")
 		os.Exit(1)
 	}
 	url := ""

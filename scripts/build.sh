@@ -5,26 +5,19 @@
 
 set -e
 
-# Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 COLORS_GO="$PROJECT_ROOT/src/colors.go"
 COLORS_SH="$SCRIPT_DIR/colors.sh"
-if [ ! -f "$COLORS_SH" ] || [ "$COLORS_GO" -nt "$COLORS_SH" ]; then
-    "$SCRIPT_DIR/generate_colors.sh"
-fi
+[ ! -f "$COLORS_SH" ] || [ "$COLORS_GO" -nt "$COLORS_SH" ] && "$SCRIPT_DIR/generate_colors.sh"
 source "$COLORS_SH"
 
 echo -e "${GREEN}Building logget for multiple platforms...${NC}"
 echo -e "${YELLOW}Project root: $PROJECT_ROOT${NC}"
 
-# Create build directory
 mkdir -p "$PROJECT_ROOT/build"
-
-# Get version from VERSION file or use default
 VERSION=$(cat "$PROJECT_ROOT/VERSION" 2>/dev/null || echo "dev")
 
-# Build for different platforms
 echo -e "${YELLOW}Building for Linux (amd64)...${NC}"
 (cd "$PROJECT_ROOT" && GOOS=linux GOARCH=amd64 go build -ldflags "-X main.version=$VERSION" -o "build/logget-linux-amd64" .)
 

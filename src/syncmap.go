@@ -27,6 +27,4 @@ type NetworkMaps struct {
 	NetworkEntries sync.Map
 }
 
-func GetNetworkMaps() *NetworkMaps {
-	return &NetworkMaps{}
-}
+func GetNetworkMaps() *NetworkMaps { return &NetworkMaps{} }

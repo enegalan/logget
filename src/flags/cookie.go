@@ -7,19 +7,16 @@ import (
 
 type CookieArray []string
 
-func (c *CookieArray) String() string {
-	return strings.Join(*c, ", ")
-}
-
+func (c *CookieArray) String() string { return strings.Join(*c, ", ") }
 func (c *CookieArray) Set(value string) error {
 	processCookieLine := func(line string) string {
 		if strings.Contains(line, "\t") {
 			fields := strings.Split(line, "\t")
 			if len(fields) >= 7 {
 				name := strings.TrimSpace(fields[5])
-				value := strings.TrimSpace(fields[6])
+				val := strings.TrimSpace(fields[6])
 				if name != "" {
-					return name + "=" + value
+					return name + "=" + val
 				}
 			}
 			return ""
@@ -29,20 +26,14 @@ func (c *CookieArray) Set(value string) error {
 		}
 		return ""
 	}
-	lines, _, err := helpers.TryReadAsFile(
-		value,
-		"=",
+	lines, _, err := helpers.TryReadAsFile(value, "=",
 		func(val string) bool { return strings.Contains(val, "=") || val != "" },
 		func(line string) bool { return strings.Contains(line, "\t") || strings.Contains(line, "=") },
-		processCookieLine,
-	)
+		processCookieLine)
 	if err != nil {
 		return err
 	}
 	*c = append(*c, lines...)
 	return nil
 }
-
-func (c *CookieArray) Type() string {
-	return "<data|file>"
-}
+func (c *CookieArray) Type() string { return "<data|file>" }
