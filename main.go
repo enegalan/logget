@@ -11,23 +11,23 @@ import (
 )
 
 var (
-	showLogs    bool
-	showNetwork bool
-	jsonOutput  bool
-	yamlOutput  bool
-	csvOutput   bool
+	showLogs    flags.BoolFlag
+	showNetwork flags.BoolFlag
+	jsonOutput  flags.BoolFlag
+	yamlOutput  flags.BoolFlag
+	csvOutput   flags.BoolFlag
 	timeout     flags.Milliseconds
 	wait        flags.Milliseconds
 	userAgent   flags.UserAgent
 	headers     flags.HeaderArray
 	cookies     flags.CookieArray
-	versionFlag bool
-	verbose     bool
+	versionFlag flags.BoolFlag
+	verbose     flags.BoolFlag
 	outputFile  flags.OutputFile
-	appendMode  bool
+	appendMode  flags.BoolFlag
 	version     string = "dev"
 
-	followMode      bool
+	followMode      flags.BoolFlag
 	filterPattern   flags.RegexPattern
 	excludePattern  flags.RegexPattern
 	statusPattern   flags.RegexPattern
@@ -35,34 +35,28 @@ var (
 	mimePattern     flags.RegexPattern
 	refreshInterval flags.Milliseconds
 
-	skipSSLVerify        bool
-	noRotateFingerprints bool
+	skipSSLVerify        flags.BoolFlag
+	noRotateFingerprints flags.BoolFlag
 	fingerprintInterval  flags.Milliseconds
-	harOutput            bool
+	harOutput            flags.BoolFlag
 
-	xhrOnly       bool
-	documentOnly  bool
-	cssOnly       bool
-	scriptOnly    bool
-	fontOnly      bool
-	imgOnly       bool
-	mediaOnly     bool
-	manifestOnly  bool
-	websocketOnly bool
-	noColor       bool
-	quiet         bool
+	xhrOnly       flags.BoolFlag
+	documentOnly  flags.BoolFlag
+	cssOnly       flags.BoolFlag
+	scriptOnly    flags.BoolFlag
+	fontOnly      flags.BoolFlag
+	imgOnly       flags.BoolFlag
+	mediaOnly     flags.BoolFlag
+	manifestOnly  flags.BoolFlag
+	websocketOnly flags.BoolFlag
+	noColor       flags.BoolFlag
+	quiet         flags.BoolFlag
 	minSize       flags.SizeBytes
 	maxSize       flags.SizeBytes
 )
 
 func main() {
 	log.SetOutput(io.Discard)
-	// Initialize flags with default values
-	timeout.SimpleFlag = flags.SimpleFlag[int]{Value: 60000, TypeName: "<milliseconds>"}
-	wait.SimpleFlag = flags.SimpleFlag[int]{Value: 100, TypeName: "<milliseconds>"}
-	userAgent.SimpleFlag = flags.SimpleFlag[string]{Value: "logget/1.0", TypeName: "<name>"}
-	refreshInterval.SimpleFlag = flags.SimpleFlag[int]{Value: 100, TypeName: "<milliseconds>"}
-	fingerprintInterval.SimpleFlag = flags.SimpleFlag[int]{Value: 5000, TypeName: "<milliseconds>"}
 	var rootCmd = &cobra.Command{
 		Use:          "logget [flags] <url>",
 		Short:        "Extract logs and network data from web pages",
@@ -70,44 +64,7 @@ func main() {
 		Run:          runLogget,
 		SilenceUsage: true,
 	}
-	rootCmd.Flags().BoolVarP(&showLogs, "logs", "L", false, "Show console logs")
-	rootCmd.Flags().BoolVarP(&showNetwork, "network", "N", false, "Show network requests")
-	rootCmd.Flags().BoolVarP(&jsonOutput, "json", "J", false, "Output in JSON format")
-	rootCmd.Flags().BoolVar(&yamlOutput, "yaml", false, "Output in YAML format")
-	rootCmd.Flags().BoolVar(&csvOutput, "csv", false, "Output in CSV format")
-	rootCmd.Flags().VarP(&timeout, "timeout", "T", "Timeout in milliseconds")
-	rootCmd.Flags().VarP(&wait, "wait", "W", "Wait time in milliseconds after page load")
-	rootCmd.Flags().VarP(&userAgent, "user-agent", "A", "Set User-Agent header")
-	rootCmd.Flags().VarP(&headers, "header", "H", "Add custom headers (format: 'Key: Value') or filename containing headers")
-	rootCmd.Flags().VarP(&cookies, "cookie", "C", "Add cookies (format: 'name=value' or 'name=value; domain=example.com') or filename containing cookies")
-	rootCmd.Flags().VarP(&outputFile, "output", "o", "Write to file instead of stdout")
-	rootCmd.Flags().BoolVarP(&appendMode, "append", "a", false, "Append to file instead of overwriting")
-	rootCmd.Flags().BoolVarP(&versionFlag, "version", "v", false, "Show version information")
-	rootCmd.Flags().BoolVarP(&verbose, "verbose", "V", false, "Show detailed HTTP protocol information")
-	rootCmd.Flags().BoolVarP(&followMode, "follow", "f", false, "Stream logs and network requests in real-time")
-	rootCmd.Flags().VarP(&filterPattern, "filter", "", "Show only logs/requests matching this regex pattern")
-	rootCmd.Flags().VarP(&excludePattern, "exclude", "", "Exclude logs/requests matching this regex pattern")
-	rootCmd.Flags().VarP(&statusPattern, "status", "", "Only include requests whose HTTP status code matches this regex pattern")
-	rootCmd.Flags().VarP(&domainPattern, "domain", "", "Only include requests whose domain matches this regex pattern")
-	rootCmd.Flags().VarP(&mimePattern, "mime", "", "Only include requests whose MIME type matches this regex pattern")
-	rootCmd.Flags().Var(&refreshInterval, "refresh", "Refresh interval in milliseconds for real-time streaming")
-	rootCmd.Flags().BoolVarP(&skipSSLVerify, "insecure", "k", false, "Skip SSL certificate verification (useful for self-signed certificates)")
-	rootCmd.Flags().BoolVar(&noColor, "no-color", false, "Disable colored output")
-	rootCmd.Flags().BoolVar(&xhrOnly, "xhr", false, "Only include fetch/XHR requests")
-	rootCmd.Flags().BoolVar(&documentOnly, "document", false, "Only include Document requests")
-	rootCmd.Flags().BoolVar(&cssOnly, "css", false, "Only include CSS requests")
-	rootCmd.Flags().BoolVar(&scriptOnly, "script", false, "Only include Script requests")
-	rootCmd.Flags().BoolVar(&fontOnly, "font", false, "Only include Font requests")
-	rootCmd.Flags().BoolVar(&imgOnly, "img", false, "Only include Image requests")
-	rootCmd.Flags().BoolVar(&mediaOnly, "media", false, "Only include Media requests")
-	rootCmd.Flags().BoolVar(&manifestOnly, "manifest", false, "Only include Manifest requests")
-	rootCmd.Flags().BoolVar(&websocketOnly, "socket", false, "Only include WebSocket requests")
-	rootCmd.Flags().VarP(&minSize, "min-size", "", "Only include requests whose size is at least this many bytes")
-	rootCmd.Flags().VarP(&maxSize, "max-size", "", "Only include requests whose size is at most this many bytes")
-	rootCmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress progress messages, only show data")
-	rootCmd.Flags().BoolVar(&noRotateFingerprints, "no-rotate-fingerprints", false, "Disable fingerprint rotation (default: enabled)")
-	rootCmd.Flags().Var(&fingerprintInterval, "fingerprint-interval", "Interval in milliseconds for fingerprint rotation")
-	rootCmd.Flags().BoolVar(&harOutput, "har", false, "Output in HAR (HTTP Archive) format")
+	initFlags(rootCmd)
 	rootCmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
 		os.Stderr.WriteString("logget: " + command.FormatCobraError(err) + "\n")
 		os.Exit(1)
@@ -117,6 +74,85 @@ func main() {
 		os.Stderr.WriteString("logget: " + command.FormatCobraError(err) + "\n")
 		os.Exit(1)
 	}
+}
+
+func initFlags(cmd *cobra.Command) {
+	showLogs.SetDefault(false, showLogs.Type())
+	showNetwork.SetDefault(false, showNetwork.Type())
+	jsonOutput.SetDefault(false, jsonOutput.Type())
+	yamlOutput.SetDefault(false, yamlOutput.Type())
+	csvOutput.SetDefault(false, csvOutput.Type())
+	timeout.SetDefault(60000, timeout.Type())
+	wait.SetDefault(100, wait.Type())
+	userAgent.SetDefault("logget/1.0", userAgent.Type())
+	headers.SetDefault([]string{}, headers.Type())
+	cookies.SetDefault([]string{}, cookies.Type())
+	versionFlag.SetDefault(false, versionFlag.Type())
+	verbose.SetDefault(false, verbose.Type())
+	outputFile.SetDefault("", outputFile.Type())
+	appendMode.SetDefault(false, appendMode.Type())
+	refreshInterval.SetDefault(100, refreshInterval.Type())
+	followMode.SetDefault(false, followMode.Type())
+	filterPattern.SetDefault("", filterPattern.Type())
+	excludePattern.SetDefault("", excludePattern.Type())
+	statusPattern.SetDefault("", statusPattern.Type())
+	domainPattern.SetDefault("", domainPattern.Type())
+	mimePattern.SetDefault("", mimePattern.Type())
+	skipSSLVerify.SetDefault(false, skipSSLVerify.Type())
+	noRotateFingerprints.SetDefault(false, noRotateFingerprints.Type())
+	fingerprintInterval.SetDefault(5000, fingerprintInterval.Type())
+	harOutput.SetDefault(false, harOutput.Type())
+	xhrOnly.SetDefault(false, xhrOnly.Type())
+	documentOnly.SetDefault(false, documentOnly.Type())
+	cssOnly.SetDefault(false, cssOnly.Type())
+	scriptOnly.SetDefault(false, scriptOnly.Type())
+	fontOnly.SetDefault(false, fontOnly.Type())
+	imgOnly.SetDefault(false, imgOnly.Type())
+	mediaOnly.SetDefault(false, mediaOnly.Type())
+	manifestOnly.SetDefault(false, manifestOnly.Type())
+	websocketOnly.SetDefault(false, websocketOnly.Type())
+	noColor.SetDefault(false, noColor.Type())
+	quiet.SetDefault(false, quiet.Type())
+	minSize.SetDefault(0, minSize.Type())
+	maxSize.SetDefault(0, maxSize.Type())
+	cmd.Flags().VarP(&showLogs, "logs", "L", "Show console logs")
+	cmd.Flags().VarP(&showNetwork, "network", "N", "Show network requests")
+	cmd.Flags().VarP(&jsonOutput, "json", "J", "Output in JSON format")
+	cmd.Flags().Var(&yamlOutput, "yaml", "Output in YAML format")
+	cmd.Flags().Var(&csvOutput, "csv", "Output in CSV format")
+	cmd.Flags().VarP(&timeout, "timeout", "T", "Timeout in milliseconds")
+	cmd.Flags().VarP(&wait, "wait", "W", "Wait time in milliseconds after page load")
+	cmd.Flags().VarP(&userAgent, "user-agent", "A", "Set User-Agent header")
+	cmd.Flags().VarP(&headers, "header", "H", "Add custom headers (format: 'Key: Value') or filename containing headers")
+	cmd.Flags().VarP(&cookies, "cookie", "C", "Add cookies (format: 'name=value' or 'name=value; domain=example.com') or filename containing cookies")
+	cmd.Flags().VarP(&outputFile, "output", "o", "Write to file instead of stdout")
+	cmd.Flags().VarP(&appendMode, "append", "a", "Append to file instead of overwriting")
+	cmd.Flags().VarP(&versionFlag, "version", "v", "Show version information")
+	cmd.Flags().VarP(&verbose, "verbose", "V", "Show detailed HTTP protocol information")
+	cmd.Flags().VarP(&followMode, "follow", "f", "Stream logs and network requests in real-time")
+	cmd.Flags().VarP(&filterPattern, "filter", "", "Show only logs/requests matching this regex pattern")
+	cmd.Flags().VarP(&excludePattern, "exclude", "", "Exclude logs/requests matching this regex pattern")
+	cmd.Flags().VarP(&statusPattern, "status", "", "Only include requests whose HTTP status code matches this regex pattern")
+	cmd.Flags().VarP(&domainPattern, "domain", "", "Only include requests whose domain matches this regex pattern")
+	cmd.Flags().VarP(&mimePattern, "mime", "", "Only include requests whose MIME type matches this regex pattern")
+	cmd.Flags().Var(&refreshInterval, "refresh", "Refresh interval in milliseconds for real-time streaming")
+	cmd.Flags().VarP(&skipSSLVerify, "insecure", "k", "Skip SSL certificate verification (useful for self-signed certificates)")
+	cmd.Flags().Var(&noColor, "no-color", "Disable colored output")
+	cmd.Flags().Var(&xhrOnly, "xhr", "Only include fetch/XHR requests")
+	cmd.Flags().Var(&documentOnly, "document", "Only include Document requests")
+	cmd.Flags().Var(&cssOnly, "css", "Only include CSS requests")
+	cmd.Flags().Var(&scriptOnly, "script", "Only include Script requests")
+	cmd.Flags().Var(&fontOnly, "font", "Only include Font requests")
+	cmd.Flags().Var(&imgOnly, "img", "Only include Image requests")
+	cmd.Flags().Var(&mediaOnly, "media", "Only include Media requests")
+	cmd.Flags().Var(&manifestOnly, "manifest", "Only include Manifest requests")
+	cmd.Flags().Var(&websocketOnly, "socket", "Only include WebSocket requests")
+	cmd.Flags().VarP(&minSize, "min-size", "", "Only include requests whose size is at least this many bytes")
+	cmd.Flags().VarP(&maxSize, "max-size", "", "Only include requests whose size is at most this many bytes")
+	cmd.Flags().VarP(&quiet, "quiet", "q", "Suppress progress messages, only show data")
+	cmd.Flags().Var(&noRotateFingerprints, "no-rotate-fingerprints", "Disable fingerprint rotation (default: enabled)")
+	cmd.Flags().Var(&fingerprintInterval, "fingerprint-interval", "Interval in milliseconds for fingerprint rotation")
+	cmd.Flags().Var(&harOutput, "har", "Output in HAR (HTTP Archive) format")
 }
 
 func runLogget(cmd *cobra.Command, args []string) {
@@ -129,43 +165,43 @@ func runLogget(cmd *cobra.Command, args []string) {
 		url = args[0]
 	}
 	cmdConfig := command.CommandConfig{
-		ShowLogs:             showLogs,
-		ShowNetwork:          showNetwork,
-		JSONOutput:           jsonOutput,
-		YAMLOutput:           yamlOutput,
-		CSVOutput:            csvOutput,
+		ShowLogs:             showLogs.Get(),
+		ShowNetwork:          showNetwork.Get(),
+		JSONOutput:           jsonOutput.Get(),
+		YAMLOutput:           yamlOutput.Get(),
+		CSVOutput:            csvOutput.Get(),
 		Timeout:              timeout.Get(),
 		Wait:                 wait.Get(),
 		UserAgent:            userAgent.Get(),
-		Headers:              []string(headers),
-		Cookies:              []string(cookies),
-		VersionFlag:          versionFlag,
-		Verbose:              verbose,
+		Headers:              headers.Get(),
+		Cookies:              cookies.Get(),
+		VersionFlag:          versionFlag.Get(),
+		Verbose:              verbose.Get(),
 		OutputFile:           outputFile.Get(),
-		AppendMode:           appendMode,
+		AppendMode:           appendMode.Get(),
 		Version:              version,
-		FollowMode:           followMode,
+		FollowMode:           followMode.Get(),
 		FilterPattern:        filterPattern.Get(),
 		ExcludePattern:       excludePattern.Get(),
 		StatusPattern:        statusPattern.Get(),
 		DomainPattern:        domainPattern.Get(),
 		MimePattern:          mimePattern.Get(),
 		RefreshInterval:      refreshInterval.Get(),
-		SkipSSLVerify:        skipSSLVerify,
-		NoRotateFingerprints: noRotateFingerprints,
+		SkipSSLVerify:        skipSSLVerify.Get(),
+		NoRotateFingerprints: noRotateFingerprints.Get(),
 		FingerprintInterval:  fingerprintInterval.Get(),
-		HAROutput:            harOutput,
-		XHROnly:              xhrOnly,
-		DocumentOnly:         documentOnly,
-		CssOnly:              cssOnly,
-		ScriptOnly:           scriptOnly,
-		FontOnly:             fontOnly,
-		ImgOnly:              imgOnly,
-		MediaOnly:            mediaOnly,
-		ManifestOnly:         manifestOnly,
-		WebSocketOnly:        websocketOnly,
-		NoColor:              noColor,
-		Quiet:                quiet,
+		HAROutput:            harOutput.Get(),
+		XHROnly:              xhrOnly.Get(),
+		DocumentOnly:         documentOnly.Get(),
+		CssOnly:              cssOnly.Get(),
+		ScriptOnly:           scriptOnly.Get(),
+		FontOnly:             fontOnly.Get(),
+		ImgOnly:              imgOnly.Get(),
+		MediaOnly:            mediaOnly.Get(),
+		ManifestOnly:         manifestOnly.Get(),
+		WebSocketOnly:        websocketOnly.Get(),
+		NoColor:              noColor.Get(),
+		Quiet:                quiet.Get(),
 		MinSize:              minSize.Get(),
 		MaxSize:              maxSize.Get(),
 	}

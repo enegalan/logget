@@ -5,9 +5,12 @@ import (
 	"strings"
 )
 
-type CookieArray []string
+type CookieArray struct {
+	SimpleFlag[[]string]
+}
 
-func (c *CookieArray) String() string { return strings.Join(*c, ", ") }
+func (c *CookieArray) Type() string { return "<data|file>" }
+
 func (c *CookieArray) Set(value string) error {
 	processCookieLine := func(line string) string {
 		if strings.Contains(line, "\t") {
@@ -33,7 +36,16 @@ func (c *CookieArray) Set(value string) error {
 	if err != nil {
 		return err
 	}
-	*c = append(*c, lines...)
+	if c.Value == nil {
+		c.Value = []string{}
+	}
+	c.Value = append(c.Value, lines...)
 	return nil
 }
-func (c *CookieArray) Type() string { return "<data|file>" }
+
+func (c *CookieArray) Get() []string {
+	if c.Value == nil {
+		return []string{}
+	}
+	return c.Value
+}

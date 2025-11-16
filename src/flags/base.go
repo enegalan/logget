@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-type SimpleFlag[T string | int | int64] struct {
+type SimpleFlag[T string | int | int64 | []string | bool] struct {
 	Value    T
 	TypeName string
 }
@@ -20,6 +20,10 @@ func (f *SimpleFlag[T]) String() string {
 		return fmt.Sprintf("%d", val)
 	case int64:
 		return fmt.Sprintf("%d", val)
+	case []string:
+		return strings.Join(val, ", ")
+	case bool:
+		return fmt.Sprintf("%t", val)
 	}
 	return ""
 }
@@ -39,6 +43,16 @@ func (f *SimpleFlag[T]) Set(value string) error {
 		return nil
 	case int64:
 		val, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid %s value: %v", f.TypeName, err)
+		}
+		f.Value = any(val).(T)
+		return nil
+	case []string:
+		f.Value = any([]string{value}).(T)
+		return nil
+	case bool:
+		val, err := strconv.ParseBool(value)
 		if err != nil {
 			return fmt.Errorf("invalid %s value: %v", f.TypeName, err)
 		}
@@ -65,6 +79,15 @@ func (f *SimpleFlag[T]) Empty() bool {
 		return val == 0
 	case int64:
 		return val == 0
+	case []string:
+		return len(val) == 0
+	case bool:
+		return !val
 	}
 	return true
+}
+
+func (f *SimpleFlag[T]) SetDefault(value T, typeName string) {
+	f.Value = value
+	f.TypeName = typeName
 }
