@@ -42,7 +42,6 @@ var (
 	BgWhite       string
 	BgGray        string
 )
-
 var colorMap map[string]string
 
 func init() {
@@ -152,28 +151,25 @@ func DefaultTheme() *ColorTheme {
 
 func DisabledTheme() *ColorTheme {
 	return &ColorTheme{
-		Enabled:  false,
-		Debug:    "",
-		Info:     "",
-		Warn:     "",
-		Error:    "",
-		Fatal:    "",
-		Success:  "",
-		Progress: "",
-
-		Timestamp: "",
-		Header:    "",
-		Separator: "",
-		Border:    "",
-
+		Enabled:           false,
+		Debug:             "",
+		Info:              "",
+		Warn:              "",
+		Error:             "",
+		Fatal:             "",
+		Success:           "",
+		Progress:          "",
+		Timestamp:         "",
+		Header:            "",
+		Separator:         "",
+		Border:            "",
 		StatusSuccess:     "",
 		StatusRedirect:    "",
 		StatusClientError: "",
 		StatusServerError: "",
-
-		Checkmark: "",
-		Arrow:     "",
-		Cross:     "",
+		Checkmark:         "",
+		Arrow:             "",
+		Cross:             "",
 	}
 }
 
@@ -255,9 +251,7 @@ func (ct *ColorTheme) FormatSeparator(char string, length int) string {
 	return ct.Colorize(ct.Separator, separator)
 }
 
-func (ct *ColorTheme) FormatBorder(char string) string {
-	return ct.Colorize(ct.Border, char)
-}
+func (ct *ColorTheme) FormatBorder(char string) string { return ct.Colorize(ct.Border, char) }
 
 func (ct *ColorTheme) GetHTTPMethodColor(method string) string {
 	switch method {

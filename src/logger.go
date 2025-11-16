@@ -48,9 +48,7 @@ func NewLogger(verbose bool, colors bool) *Logger {
 	}
 }
 
-func (l *Logger) SetQuiet(quiet bool) {
-	l.quiet = quiet
-}
+func (l *Logger) SetQuiet(quiet bool) { l.quiet = quiet }
 
 func (l *Logger) formatMessage(level LogLevel, format string, args ...interface{}) string {
 	timestamp := time.Now().Format("15:04:05")
@@ -144,6 +142,4 @@ func (l *Logger) PrintUsage() {
 	fmt.Fprintf(os.Stderr, "logget: try 'logget --help' for more information\n")
 }
 
-func (l *Logger) PrintError(err error) {
-	fmt.Fprintf(os.Stderr, "logget: %v\n", err)
-}
+func (l *Logger) PrintError(err error) { fmt.Fprintf(os.Stderr, "logget: %v\n", err) }

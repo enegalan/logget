@@ -124,7 +124,7 @@ func initFlags(cmd *cobra.Command) {
 
 func runLogget(cmd *cobra.Command, args []string) {
 	if len(args) > 0 && args[0] == "-" {
-		os.Stderr.WriteString("logget: " + command.FormatUnknownFlag("", true) + "\n")
+		os.Stderr.WriteString("logget: " + flags.FormatUnknownFlag("", true) + "\n")
 		os.Exit(1)
 	}
 	url := ""

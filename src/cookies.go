@@ -64,11 +64,7 @@ func SetCookies(ctx context.Context, targetURL string, cookies []string) error {
 				}
 			}
 		}
-		cookieCmd := cdpnetwork.SetCookie(name, value).
-			WithDomain(cookieDomain).
-			WithPath(path).
-			WithSecure(secure).
-			WithHTTPOnly(httpOnly)
+		cookieCmd := cdpnetwork.SetCookie(name, value).WithDomain(cookieDomain).WithPath(path).WithSecure(secure).WithHTTPOnly(httpOnly)
 		if sameSite != "" {
 			switch strings.ToLower(sameSite) {
 			case "strict":

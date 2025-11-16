@@ -12,6 +12,7 @@ import (
 
 	helpers "logget/src"
 	chrome "logget/src/chrome"
+	"logget/src/flags"
 
 	cdpnetwork "github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
@@ -217,36 +218,18 @@ func RunLogget(cmdConfig CommandConfig, url string) {
 	writeFinalOutput(cfg, output, network, url, startTime, responseProtocol, statusCode, duration, logger, formatter, cmdConfig.JSONOutput, cmdConfig.YAMLOutput, cmdConfig.Verbose, cmdConfig.ShowLogs, cmdConfig.ShowNetwork, requestCaptured, requestHeaders, responseHeaders)
 }
 
-func FormatUnknownFlag(flag string, isShort bool) string {
-	if isShort {
-		return "option -" + flag + ": is unknown"
-	}
-	return "option --" + flag + ": is unknown"
-}
-
-func extractFlagName(flagStr string) string {
-	flagStr = strings.Trim(flagStr, "'\"")
-	if idx := strings.Index(flagStr, " "); idx != -1 {
-		flagStr = flagStr[:idx]
-	}
-	if idx := strings.Index(flagStr, " in"); idx != -1 {
-		flagStr = flagStr[:idx]
-	}
-	return flagStr
-}
-
 func FormatCobraError(err error) string {
 	errStr := err.Error()
 	if strings.Contains(errStr, "unknown flag: --") {
-		return FormatUnknownFlag(extractFlagName(strings.TrimPrefix(errStr, "unknown flag: --")), false)
+		return flags.FormatUnknownFlag(flags.ExtractFlagName(strings.TrimPrefix(errStr, "unknown flag: --")), false)
 	}
 	if strings.Contains(errStr, "unknown shorthand flag: ") {
 		if startIdx := strings.Index(errStr, "'"); startIdx != -1 {
 			if endIdx := strings.Index(errStr[startIdx+1:], "'"); endIdx != -1 {
-				return FormatUnknownFlag(extractFlagName(errStr[startIdx+1:startIdx+1+endIdx]), true)
+				return flags.FormatUnknownFlag(flags.ExtractFlagName(errStr[startIdx+1:startIdx+1+endIdx]), true)
 			}
 		}
-		return FormatUnknownFlag(extractFlagName(strings.TrimPrefix(errStr, "unknown shorthand flag: ")), true)
+		return flags.FormatUnknownFlag(flags.ExtractFlagName(strings.TrimPrefix(errStr, "unknown shorthand flag: ")), true)
 	}
 	return errStr
 }
