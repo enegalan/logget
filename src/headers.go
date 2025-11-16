@@ -9,6 +9,12 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
+type headerDef struct {
+	name         string
+	getDefault   func(cfg Config, url string) string
+	httpsOnly    bool
+}
+
 func GenerateHeaders(cfg Config, url string) []string {
 	customHeaderMap := make(map[string]string)
 	for _, header := range cfg.Headers {
@@ -24,29 +30,37 @@ func GenerateHeaders(cfg Config, url string) []string {
 		}
 		return defaultValue
 	}
+	getAcceptDefault := func(url string) string {
+		if strings.Contains(url, ".json") || strings.Contains(url, "/api/") || strings.Contains(url, "api.") {
+			return "application/json,text/plain,*/*"
+		}
+		if strings.Contains(url, ".css") {
+			return "text/css,*/*;q=0.1"
+		}
+		return "*/*"
+	}
+	defaultHeaders := []headerDef{
+		{"User-Agent", func(cfg Config, url string) string { return cfg.UserAgent }, false},
+		{"Accept", func(cfg Config, url string) string { return getAcceptDefault(url) }, false},
+		{"Accept-Language", func(cfg Config, url string) string { return "en-US,en;q=0.5" }, false},
+		{"Accept-Encoding", func(cfg Config, url string) string { return "gzip, deflate" }, false},
+		{"Connection", func(cfg Config, url string) string { return "keep-alive" }, false},
+		{"Upgrade-Insecure-Requests", func(cfg Config, url string) string { return "1" }, true},
+		{"Sec-Fetch-Dest", func(cfg Config, url string) string { return "document" }, true},
+		{"Sec-Fetch-Mode", func(cfg Config, url string) string { return "navigate" }, true},
+		{"Sec-Fetch-Site", func(cfg Config, url string) string { return "none" }, true},
+		{"Cache-Control", func(cfg Config, url string) string { return "max-age=0" }, false},
+	}
 	var headers []string
-	headers = append(headers, fmt.Sprintf("User-Agent: %s", getHeader("user-agent", cfg.UserAgent)))
-	acceptDefault := "*/*"
-	if strings.Contains(url, ".json") || strings.Contains(url, "/api/") || strings.Contains(url, "api.") {
-		acceptDefault = "application/json,text/plain,*/*"
-	} else if strings.Contains(url, ".css") {
-		acceptDefault = "text/css,*/*;q=0.1"
-	}
-	headers = append(headers, fmt.Sprintf("Accept: %s", getHeader("accept", acceptDefault)))
-	headers = append(headers, fmt.Sprintf("Accept-Language: %s", getHeader("accept-language", "en-US,en;q=0.5")))
-	headers = append(headers, fmt.Sprintf("Accept-Encoding: %s", getHeader("accept-encoding", "gzip, deflate")))
-	headers = append(headers, fmt.Sprintf("Connection: %s", getHeader("connection", "keep-alive")))
-	if strings.HasPrefix(url, "https://") {
-		headers = append(headers, fmt.Sprintf("Upgrade-Insecure-Requests: %s", getHeader("upgrade-insecure-requests", "1")))
-		headers = append(headers, fmt.Sprintf("Sec-Fetch-Dest: %s", getHeader("sec-fetch-dest", "document")))
-		headers = append(headers, fmt.Sprintf("Sec-Fetch-Mode: %s", getHeader("sec-fetch-mode", "navigate")))
-		headers = append(headers, fmt.Sprintf("Sec-Fetch-Site: %s", getHeader("sec-fetch-site", "none")))
-	}
-	headers = append(headers, fmt.Sprintf("Cache-Control: %s", getHeader("cache-control", "max-age=0")))
-	processedKeys := map[string]bool{
-		"user-agent": true, "accept": true, "accept-language": true, "accept-encoding": true,
-		"connection": true, "upgrade-insecure-requests": true, "sec-fetch-dest": true,
-		"sec-fetch-mode": true, "sec-fetch-site": true, "cache-control": true,
+	processedKeys := make(map[string]bool)
+	for _, def := range defaultHeaders {
+		if def.httpsOnly && !strings.HasPrefix(url, "https://") {
+			continue
+		}
+		key := strings.ToLower(def.name)
+		processedKeys[key] = true
+		defaultValue := def.getDefault(cfg, url)
+		headers = append(headers, fmt.Sprintf("%s: %s", def.name, getHeader(key, defaultValue)))
 	}
 	for _, header := range cfg.Headers {
 		if colonIndex := strings.Index(header, ":"); colonIndex != -1 {

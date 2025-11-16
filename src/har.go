@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	chrome "logget/src/chrome"
 )
 
 type HAR struct {
@@ -121,7 +123,7 @@ type HARPostParam struct {
 	ContentType string `json:"contentType,omitempty"`
 }
 
-func ConvertNetworkEntriesToHAR(entries []NetworkEntry, pageURL string, startTime time.Time) ([]byte, error) {
+func ConvertNetworkEntriesToHAR(entries []chrome.NetworkEntry, pageURL string, startTime time.Time) ([]byte, error) {
 	har := HAR{
 		Log: HARLog{
 			Version: "1.2",

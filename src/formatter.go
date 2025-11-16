@@ -7,6 +7,40 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	chrome "logget/src/chrome"
+)
+
+var (
+	logLevelSymbols = map[string]string{
+		"DEBUG":               "🐛",
+		"INFO":                "ℹ️",
+		"WARN":                "⚠️",
+		"WARNING":             "⚠️",
+		"ERROR":               "❌",
+		"FATAL":               "💀",
+		"LOG":                 "📝",
+		"TRACE":               "🔍",
+		"STARTGROUP":          "📂",
+		"STARTGROUPCOLLAPSED": "📂",
+		"ENDGROUP":            "📂",
+		"DIR":                 "🗂️",
+		"DIRXML":              "🗂️",
+		"TABLE":               "📊",
+		"TIMEEND":             "⏰",
+	}
+	defaultLogLevelSymbol = "📋"
+
+	httpMethodSymbols = map[string]string{
+		"GET":     "📥",
+		"POST":    "📤",
+		"HEAD":    "🔍",
+		"OPTIONS": "🔍",
+		"PUT":     "🔄",
+		"DELETE":  "🗑️",
+		"PATCH":   "🔧",
+	}
+	defaultHTTPMethodSymbol = "🌐"
 )
 
 type OutputFormatter struct {
@@ -60,7 +94,7 @@ func (f *OutputFormatter) FormatResponseHeaders(headers map[string]string) strin
 	return sb.String()
 }
 
-func (f *OutputFormatter) FormatConsoleLogs(logs []LogEntry) string {
+func (f *OutputFormatter) FormatConsoleLogs(logs []chrome.LogEntry) string {
 	if len(logs) == 0 {
 		return ""
 	}
@@ -81,7 +115,7 @@ func (f *OutputFormatter) FormatConsoleLogs(logs []LogEntry) string {
 	return sb.String()
 }
 
-func (f *OutputFormatter) FormatNetworkRequests(network []NetworkEntry) string {
+func (f *OutputFormatter) FormatNetworkRequests(network []chrome.NetworkEntry) string {
 	if len(network) == 0 {
 		return ""
 	}
@@ -168,47 +202,23 @@ func (f *OutputFormatter) FormatNetworkPrefix() string { return f.theme.FormatNe
 
 func (f *OutputFormatter) Colorize(color, text string) string { return f.theme.Colorize(color, text) }
 
-func (f *OutputFormatter) FormatAndOutputLog(le LogEntry, cfg Config) error {
+func (f *OutputFormatter) FormatAndOutputLog(le chrome.LogEntry, cfg Config) error {
 	level := strings.ToUpper(le.Level)
 	levelColor := f.GetLogLevelColor(level)
-	levelSymbol := map[string]string{
-		"DEBUG":               "🐛",
-		"INFO":                "ℹ️",
-		"WARN":                "⚠️",
-		"WARNING":             "⚠️",
-		"ERROR":               "❌",
-		"FATAL":               "💀",
-		"LOG":                 "📝",
-		"TRACE":               "🔍",
-		"STARTGROUP":          "📂",
-		"STARTGROUPCOLLAPSED": "📂",
-		"ENDGROUP":            "📂",
-		"DIR":                 "🗂️",
-		"DIRXML":              "🗂️",
-		"TABLE":               "📊",
-		"TIMEEND":             "⏰",
-	}[level]
+	levelSymbol := logLevelSymbols[level]
 	if levelSymbol == "" {
-		levelSymbol = "📋"
+		levelSymbol = defaultLogLevelSymbol
 	}
 	return WriteOutput(cfg, fmt.Sprintf("[%s] %s %s %s: %s\n",
 		f.FormatTimestamp(le.Time.Format("15:04:05")), f.FormatConsolePrefix(),
 		f.Colorize(levelColor, levelSymbol), f.Colorize(levelColor, level), le.Message))
 }
 
-func (f *OutputFormatter) FormatAndOutputNetwork(ne NetworkEntry, cfg Config) error {
+func (f *OutputFormatter) FormatAndOutputNetwork(ne chrome.NetworkEntry, cfg Config) error {
 	methodColor := f.GetHTTPMethodColor(ne.Method)
-	methodSymbol := map[string]string{
-		"GET":     "📥",
-		"POST":    "📤",
-		"HEAD":    "🔍",
-		"OPTIONS": "🔍",
-		"PUT":     "🔄",
-		"DELETE":  "🗑️",
-		"PATCH":   "🔧",
-	}[ne.Method]
+	methodSymbol := httpMethodSymbols[ne.Method]
 	if methodSymbol == "" {
-		methodSymbol = "🌐"
+		methodSymbol = defaultHTTPMethodSymbol
 	}
 	var statusOrError string
 	if ne.Error != "" {
@@ -230,7 +240,7 @@ func (f *OutputFormatter) FormatAndOutputNetwork(ne NetworkEntry, cfg Config) er
 		f.Colorize(methodColor, methodSymbol), f.Colorize(methodColor, ne.Method), ne.URL, statusOrError))
 }
 
-func (f *OutputFormatter) FormatLogsCSV(logs []LogEntry, includeHeader bool) string {
+func (f *OutputFormatter) FormatLogsCSV(logs []chrome.LogEntry, includeHeader bool) string {
 	if len(logs) == 0 {
 		return ""
 	}
@@ -246,7 +256,7 @@ func (f *OutputFormatter) FormatLogsCSV(logs []LogEntry, includeHeader bool) str
 	return buf.String()
 }
 
-func (f *OutputFormatter) FormatNetworkCSV(entries []NetworkEntry, includeHeader bool) string {
+func (f *OutputFormatter) FormatNetworkCSV(entries []chrome.NetworkEntry, includeHeader bool) string {
 	if len(entries) == 0 {
 		return ""
 	}
@@ -291,12 +301,12 @@ func (f *OutputFormatter) formatAndOutputCSVRow(header []string, row []string, i
 	return WriteOutput(cfg, buf.String())
 }
 
-func (f *OutputFormatter) FormatAndOutputLogCSVRow(le LogEntry, cfg Config, includeHeader bool) error {
+func (f *OutputFormatter) FormatAndOutputLogCSVRow(le chrome.LogEntry, cfg Config, includeHeader bool) error {
 	return f.formatAndOutputCSVRow([]string{"timestamp", "level", "source", "message"},
 		[]string{le.Time.Format(time.RFC3339), strings.ToUpper(le.Level), le.Source, le.Message}, includeHeader, cfg)
 }
 
-func (f *OutputFormatter) FormatAndOutputNetworkCSVRow(ne NetworkEntry, cfg Config, includeHeader bool) error {
+func (f *OutputFormatter) FormatAndOutputNetworkCSVRow(ne chrome.NetworkEntry, cfg Config, includeHeader bool) error {
 	return f.formatAndOutputCSVRow([]string{"timestamp", "method", "url", "status", "resourceType", "mimeType", "size", "duration", "ttfb", "connectTime", "dnsTime", "sslTime", "sendTime", "waitTime", "receiveTime", "error", "errorType"},
 		[]string{ne.Timestamp.Format(time.RFC3339), ne.Method, ne.URL, strconv.Itoa(ne.Status), ne.ResourceType, ne.Type,
 			strconv.FormatInt(ne.Size, 10), strconv.FormatFloat(ne.Duration, 'f', 2, 64), strconv.FormatFloat(ne.TimeToFirstByte, 'f', 2, 64),

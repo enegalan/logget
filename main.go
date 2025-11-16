@@ -3,7 +3,7 @@ package main
 import (
 	"io"
 	"log"
-	helpers "logget/src"
+	"logget/src/command"
 	"logget/src/flags"
 	"os"
 
@@ -16,9 +16,9 @@ var (
 	jsonOutput  bool
 	yamlOutput  bool
 	csvOutput   bool
-	timeout     flags.Milliseconds = 60000
-	wait        flags.Milliseconds = 100
-	userAgent   flags.UserAgent    = "logget/1.0"
+	timeout     flags.Milliseconds
+	wait        flags.Milliseconds
+	userAgent   flags.UserAgent
 	headers     flags.HeaderArray
 	cookies     flags.CookieArray
 	versionFlag bool
@@ -33,11 +33,11 @@ var (
 	statusPattern   flags.RegexPattern
 	domainPattern   flags.RegexPattern
 	mimePattern     flags.RegexPattern
-	refreshInterval flags.Milliseconds = 100
+	refreshInterval flags.Milliseconds
 
 	skipSSLVerify        bool
 	noRotateFingerprints bool
-	fingerprintInterval  flags.Milliseconds = 5000
+	fingerprintInterval  flags.Milliseconds
 	harOutput            bool
 
 	xhrOnly       bool
@@ -57,6 +57,12 @@ var (
 
 func main() {
 	log.SetOutput(io.Discard)
+	// Initialize flags with default values
+	timeout.SimpleFlag = flags.SimpleFlag[int]{Value: 60000, TypeName: "<milliseconds>"}
+	wait.SimpleFlag = flags.SimpleFlag[int]{Value: 100, TypeName: "<milliseconds>"}
+	userAgent.SimpleFlag = flags.SimpleFlag[string]{Value: "logget/1.0", TypeName: "<name>"}
+	refreshInterval.SimpleFlag = flags.SimpleFlag[int]{Value: 100, TypeName: "<milliseconds>"}
+	fingerprintInterval.SimpleFlag = flags.SimpleFlag[int]{Value: 5000, TypeName: "<milliseconds>"}
 	var rootCmd = &cobra.Command{
 		Use:          "logget [flags] <url>",
 		Short:        "Extract logs and network data from web pages",
@@ -103,26 +109,26 @@ func main() {
 	rootCmd.Flags().Var(&fingerprintInterval, "fingerprint-interval", "Interval in milliseconds for fingerprint rotation")
 	rootCmd.Flags().BoolVar(&harOutput, "har", false, "Output in HAR (HTTP Archive) format")
 	rootCmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
-		os.Stderr.WriteString("logget: " + helpers.FormatCobraError(err) + "\n")
+		os.Stderr.WriteString("logget: " + command.FormatCobraError(err) + "\n")
 		os.Exit(1)
 		return err
 	})
 	if err := rootCmd.Execute(); err != nil {
-		os.Stderr.WriteString("logget: " + helpers.FormatCobraError(err) + "\n")
+		os.Stderr.WriteString("logget: " + command.FormatCobraError(err) + "\n")
 		os.Exit(1)
 	}
 }
 
 func runLogget(cmd *cobra.Command, args []string) {
 	if len(args) > 0 && args[0] == "-" {
-		os.Stderr.WriteString("logget: " + helpers.FormatUnknownFlag("", true) + "\n")
+		os.Stderr.WriteString("logget: " + command.FormatUnknownFlag("", true) + "\n")
 		os.Exit(1)
 	}
 	url := ""
 	if len(args) > 0 {
 		url = args[0]
 	}
-	cmdConfig := helpers.CommandConfig{
+	cmdConfig := command.CommandConfig{
 		ShowLogs:             showLogs,
 		ShowNetwork:          showNetwork,
 		JSONOutput:           jsonOutput,
@@ -163,5 +169,5 @@ func runLogget(cmd *cobra.Command, args []string) {
 		MinSize:              minSize.Get(),
 		MaxSize:              maxSize.Get(),
 	}
-	helpers.RunLogget(cmdConfig, url)
+	command.RunLogget(cmdConfig, url)
 }

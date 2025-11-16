@@ -19,12 +19,3 @@ func LoadFloat64FromSyncMap(m *sync.Map, key string) (float64, bool) {
 	}
 	return 0, false
 }
-
-type NetworkMaps struct {
-	Methods        sync.Map
-	URLs           sync.Map
-	StartTimes     sync.Map
-	NetworkEntries sync.Map
-}
-
-func GetNetworkMaps() *NetworkMaps { return &NetworkMaps{} }
