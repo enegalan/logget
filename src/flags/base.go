@@ -62,13 +62,9 @@ func (f *SimpleFlag[T]) Set(value string) error {
 	return fmt.Errorf("unsupported type")
 }
 
-func (f *SimpleFlag[T]) Type() string {
-	return f.TypeName
-}
+func (f *SimpleFlag[T]) Type() string { return f.TypeName }
 
-func (f *SimpleFlag[T]) Get() T {
-	return f.Value
-}
+func (f *SimpleFlag[T]) Get() T { return f.Value }
 
 func (f *SimpleFlag[T]) Empty() bool {
 	var v any = f.Value
@@ -87,7 +83,7 @@ func (f *SimpleFlag[T]) Empty() bool {
 	return true
 }
 
-func (f *SimpleFlag[T]) SetDefault(value T, typeName string) {
+func (f *SimpleFlag[T]) SetDefault(value T) {
 	f.Value = value
-	f.TypeName = typeName
+	f.TypeName = f.Type()
 }
