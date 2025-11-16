@@ -52,8 +52,8 @@ func RunLogget(cmdConfig CommandConfig, url string) {
 		initialProtocol = "HTTP/1.1"
 		initialStatusCode = 200
 	}
-	logs := make([]chrome.LogEntry, 0, 100)
-	network := make([]chrome.NetworkEntry, 0, 500)
+	logs := make([]chrome.LogEntry, 0)
+	network := make([]chrome.NetworkEntry, 0)
 	responseProtocol, responseStatusCode := initialProtocol, initialStatusCode
 	responseHeaders := make(map[string]string)
 	responseCaptured := false
