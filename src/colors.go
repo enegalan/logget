@@ -1,72 +1,122 @@
 package helpers
 
-import "strings"
-
-const (
-	// Reset all formatting
-	Reset = "\033[0m"
-	// Text colors
-	Black   = "\033[30m"
-	Red     = "\033[31m"
-	Green   = "\033[32m"
-	Yellow  = "\033[33m"
-	Blue    = "\033[34m"
-	Magenta = "\033[35m"
-	Cyan    = "\033[36m"
-	White   = "\033[37m"
-	Gray    = "\033[90m"
-	// Bright colors
-	BrightRed     = "\033[91m"
-	BrightGreen   = "\033[92m"
-	BrightYellow  = "\033[93m"
-	BrightBlue    = "\033[94m"
-	BrightMagenta = "\033[95m"
-	BrightCyan    = "\033[96m"
-	BrightWhite   = "\033[97m"
-	// Text formatting
-	Bold      = "\033[1m"
-	Dim       = "\033[2m"
-	Italic    = "\033[3m"
-	Underline = "\033[4m"
-	Blink     = "\033[5m"
-	Reverse   = "\033[7m"
-	Strike    = "\033[9m"
-	// Background colors
-	BgBlack   = "\033[40m"
-	BgRed     = "\033[41m"
-	BgGreen   = "\033[42m"
-	BgYellow  = "\033[43m"
-	BgBlue    = "\033[44m"
-	BgMagenta = "\033[45m"
-	BgCyan    = "\033[46m"
-	BgWhite   = "\033[47m"
-	BgGray    = "\033[100m"
+import (
+	_ "embed"
+	"strings"
 )
 
+//go:embed colors.def
+var colorsDefData string
+var (
+	Reset         string
+	Black         string
+	Red           string
+	Green         string
+	Yellow        string
+	Blue          string
+	Magenta       string
+	Cyan          string
+	White         string
+	Gray          string
+	BrightRed     string
+	BrightGreen   string
+	BrightYellow  string
+	BrightBlue    string
+	BrightMagenta string
+	BrightCyan    string
+	BrightWhite   string
+	Bold          string
+	Dim           string
+	Italic        string
+	Underline     string
+	Blink         string
+	Reverse       string
+	Strike        string
+	BgBlack       string
+	BgRed         string
+	BgGreen       string
+	BgYellow      string
+	BgBlue        string
+	BgMagenta     string
+	BgCyan        string
+	BgWhite       string
+	BgGray        string
+)
+
+var colorMap map[string]string
+
+func init() {
+	colorMap = make(map[string]string)
+	lines := strings.Split(colorsDefData, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+		value = strings.ReplaceAll(value, "\\033", "\x1b")
+		colorMap[key] = value
+	}
+	Reset = colorMap["Reset"]
+	Black = colorMap["Black"]
+	Red = colorMap["Red"]
+	Green = colorMap["Green"]
+	Yellow = colorMap["Yellow"]
+	Blue = colorMap["Blue"]
+	Magenta = colorMap["Magenta"]
+	Cyan = colorMap["Cyan"]
+	White = colorMap["White"]
+	Gray = colorMap["Gray"]
+	BrightRed = colorMap["BrightRed"]
+	BrightGreen = colorMap["BrightGreen"]
+	BrightYellow = colorMap["BrightYellow"]
+	BrightBlue = colorMap["BrightBlue"]
+	BrightMagenta = colorMap["BrightMagenta"]
+	BrightCyan = colorMap["BrightCyan"]
+	BrightWhite = colorMap["BrightWhite"]
+	Bold = colorMap["Bold"]
+	Dim = colorMap["Dim"]
+	Italic = colorMap["Italic"]
+	Underline = colorMap["Underline"]
+	Blink = colorMap["Blink"]
+	Reverse = colorMap["Reverse"]
+	Strike = colorMap["Strike"]
+	BgBlack = colorMap["BgBlack"]
+	BgRed = colorMap["BgRed"]
+	BgGreen = colorMap["BgGreen"]
+	BgYellow = colorMap["BgYellow"]
+	BgBlue = colorMap["BgBlue"]
+	BgMagenta = colorMap["BgMagenta"]
+	BgCyan = colorMap["BgCyan"]
+	BgWhite = colorMap["BgWhite"]
+	BgGray = colorMap["BgGray"]
+}
+
 type ColorTheme struct {
-	Enabled bool
-	// Log levels
-	Debug    string
-	Info     string
-	Warn     string
-	Error    string
-	Fatal    string
-	Success  string
-	Progress string
-	// UI elements
-	Timestamp string
-	Header    string
-	Separator string
-	Border    string
-	// HTTP status codes
+	Enabled           bool
+	Debug             string
+	Info              string
+	Warn              string
+	Error             string
+	Fatal             string
+	Success           string
+	Progress          string
+	Timestamp         string
+	Header            string
+	Separator         string
+	Border            string
 	StatusSuccess     string // 2xx
 	StatusRedirect    string // 3xx
 	StatusClientError string // 4xx
 	StatusServerError string // 5xx
-	// Special elements
-	Checkmark string
-	Arrow     string
-	Cross     string
+	Checkmark         string
+	Arrow             string
+	Cross             string
 }
 
 func GetTheme(colors bool) *ColorTheme {
@@ -78,29 +128,25 @@ func GetTheme(colors bool) *ColorTheme {
 
 func DefaultTheme() *ColorTheme {
 	return &ColorTheme{
-		Enabled: true,
-		// Log levels
-		Debug:    Cyan,
-		Info:     Green,
-		Warn:     Yellow,
-		Error:    Red,
-		Fatal:    Magenta,
-		Success:  Green,
-		Progress: Blue,
-		// UI elements
-		Timestamp: Gray,
-		Header:    Bold + Gray,
-		Separator: Gray,
-		Border:    Bold + Gray,
-		// HTTP status codes
+		Enabled:           true,
+		Debug:             Cyan,
+		Info:              Green,
+		Warn:              Yellow,
+		Error:             Red,
+		Fatal:             Magenta,
+		Success:           Green,
+		Progress:          Blue,
+		Timestamp:         Gray,
+		Header:            Bold + Gray,
+		Separator:         Gray,
+		Border:            Bold + Gray,
 		StatusSuccess:     Green,
 		StatusRedirect:    Yellow,
 		StatusClientError: Red,
 		StatusServerError: Magenta,
-		// Special elements
-		Checkmark: Green,
-		Arrow:     Blue,
-		Cross:     Red,
+		Checkmark:         Green,
+		Arrow:             Blue,
+		Cross:             Red,
 	}
 }
 

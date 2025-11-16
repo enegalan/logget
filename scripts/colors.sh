@@ -1,29 +1,56 @@
 #!/bin/bash
 
-# Auto-generated from src/colors.go
-# DO NOT EDIT MANUALLY - Run 'make generate-colors' or './scripts/generate_colors.sh'
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+COLORS_DEF="$PROJECT_ROOT/src/colors.def"
 
-NC="\033[0m"
-BLACK="\033[30m"
-RED="\033[31m"
-GREEN="\033[32m"
-YELLOW="\033[33m"
-BLUE="\033[34m"
-MAGENTA="\033[35m"
-CYAN="\033[36m"
-WHITE="\033[37m"
-GRAY="\033[90m"
-BRIGHT_RED="\033[91m"
-BRIGHT_GREEN="\033[92m"
-BRIGHT_YELLOW="\033[93m"
-BRIGHT_BLUE="\033[94m"
-BRIGHT_MAGENTA="\033[95m"
-BRIGHT_CYAN="\033[96m"
-BRIGHT_WHITE="\033[97m"
-BOLD="\033[1m"
-DIM="\033[2m"
-ITALIC="\033[3m"
-UNDERLINE="\033[4m"
-BLINK="\033[5m"
-REVERSE="\033[7m"
-STRIKE="\033[9m"
+if [ ! -f "$COLORS_DEF" ]; then
+	echo "Error: $COLORS_DEF not found" >&2
+	exit 1
+fi
+
+convert_name() {
+	local name=$1
+	case "$name" in
+		Reset)
+			echo "NC"
+			;;
+		BrightRed)
+			echo "BRIGHT_RED"
+			;;
+		BrightGreen)
+			echo "BRIGHT_GREEN"
+			;;
+		BrightYellow)
+			echo "BRIGHT_YELLOW"
+			;;
+		BrightBlue)
+			echo "BRIGHT_BLUE"
+			;;
+		BrightMagenta)
+			echo "BRIGHT_MAGENTA"
+			;;
+		BrightCyan)
+			echo "BRIGHT_CYAN"
+			;;
+		BrightWhite)
+			echo "BRIGHT_WHITE"
+			;;
+		*)
+			echo "$name" | sed 's/\([A-Z]\)/_\1/g' | tr '[:lower:]' '[:upper:]' | sed 's/^_//'
+			;;
+	esac
+}
+
+while IFS='=' read -r key value || [ -n "$key" ]; do
+	[[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
+	key="${key#"${key%%[![:space:]]*}"}"
+	key="${key%"${key##*[![:space:]]}"}"
+	value="${value#"${value%%[![:space:]]*}"}"
+	value="${value%"${value##*[![:space:]]}"}"
+	[[ -z "$key" || -z "$value" ]] && continue
+	esc_char=$'\033'
+	value="${value//\\033/$esc_char}"
+	bash_name=$(convert_name "$key")
+	export "$bash_name=$value"
+done < "$COLORS_DEF"

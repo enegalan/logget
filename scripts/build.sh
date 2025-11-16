@@ -7,9 +7,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-COLORS_GO="$PROJECT_ROOT/src/colors.go"
 COLORS_SH="$SCRIPT_DIR/colors.sh"
-[ ! -f "$COLORS_SH" ] || [ "$COLORS_GO" -nt "$COLORS_SH" ] && "$SCRIPT_DIR/generate_colors.sh"
 source "$COLORS_SH"
 
 echo -e "${GREEN}Building logget for multiple platforms...${NC}"

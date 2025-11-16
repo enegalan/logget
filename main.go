@@ -77,82 +77,49 @@ func main() {
 }
 
 func initFlags(cmd *cobra.Command) {
-	showLogs.SetDefault(false)
-	showNetwork.SetDefault(false)
-	jsonOutput.SetDefault(false)
-	yamlOutput.SetDefault(false)
-	csvOutput.SetDefault(false)
-	timeout.SetDefault(60000)
-	wait.SetDefault(100)
-	userAgent.SetDefault("logget/1.0")
-	headers.SetDefault([]string{})
-	cookies.SetDefault([]string{})
-	versionFlag.SetDefault(false)
-	verbose.SetDefault(false)
-	outputFile.SetDefault("")
-	appendMode.SetDefault(false)
-	refreshInterval.SetDefault(100)
-	followMode.SetDefault(false)
-	filterPattern.SetDefault("")
-	excludePattern.SetDefault("")
-	statusPattern.SetDefault("")
-	domainPattern.SetDefault("")
-	mimePattern.SetDefault("")
-	skipSSLVerify.SetDefault(false)
-	noRotateFingerprints.SetDefault(false)
-	fingerprintInterval.SetDefault(5000)
-	harOutput.SetDefault(false)
-	xhrOnly.SetDefault(false)
-	documentOnly.SetDefault(false)
-	cssOnly.SetDefault(false)
-	scriptOnly.SetDefault(false)
-	fontOnly.SetDefault(false)
-	imgOnly.SetDefault(false)
-	mediaOnly.SetDefault(false)
-	manifestOnly.SetDefault(false)
-	websocketOnly.SetDefault(false)
-	noColor.SetDefault(false)
-	quiet.SetDefault(false)
-	minSize.SetDefault(0)
-	maxSize.SetDefault(0)
-	cmd.Flags().VarP(&showLogs, "logs", "L", "Show console logs")
-	cmd.Flags().VarP(&showNetwork, "network", "N", "Show network requests")
-	cmd.Flags().VarP(&jsonOutput, "json", "J", "Output in JSON format")
-	cmd.Flags().Var(&yamlOutput, "yaml", "Output in YAML format")
-	cmd.Flags().Var(&csvOutput, "csv", "Output in CSV format")
-	cmd.Flags().VarP(&timeout, "timeout", "T", "Timeout in milliseconds")
-	cmd.Flags().VarP(&wait, "wait", "W", "Wait time in milliseconds after page load")
-	cmd.Flags().VarP(&userAgent, "user-agent", "A", "Set User-Agent header")
-	cmd.Flags().VarP(&headers, "header", "H", "Add custom headers (format: 'Key: Value') or filename containing headers")
-	cmd.Flags().VarP(&cookies, "cookie", "C", "Add cookies (format: 'name=value' or 'name=value; domain=example.com') or filename containing cookies")
-	cmd.Flags().VarP(&outputFile, "output", "o", "Write to file instead of stdout")
-	cmd.Flags().VarP(&appendMode, "append", "a", "Append to file instead of overwriting")
-	cmd.Flags().VarP(&versionFlag, "version", "v", "Show version information")
-	cmd.Flags().VarP(&verbose, "verbose", "V", "Show detailed HTTP protocol information")
-	cmd.Flags().VarP(&followMode, "follow", "f", "Stream logs and network requests in real-time")
-	cmd.Flags().VarP(&filterPattern, "filter", "", "Show only logs/requests matching this regex pattern")
-	cmd.Flags().VarP(&excludePattern, "exclude", "", "Exclude logs/requests matching this regex pattern")
-	cmd.Flags().VarP(&statusPattern, "status", "", "Only include requests whose HTTP status code matches this regex pattern")
-	cmd.Flags().VarP(&domainPattern, "domain", "", "Only include requests whose domain matches this regex pattern")
-	cmd.Flags().VarP(&mimePattern, "mime", "", "Only include requests whose MIME type matches this regex pattern")
-	cmd.Flags().Var(&refreshInterval, "refresh", "Refresh interval in milliseconds for real-time streaming")
-	cmd.Flags().VarP(&skipSSLVerify, "insecure", "k", "Skip SSL certificate verification (useful for self-signed certificates)")
-	cmd.Flags().Var(&noColor, "no-color", "Disable colored output")
-	cmd.Flags().Var(&xhrOnly, "xhr", "Only include fetch/XHR requests")
-	cmd.Flags().Var(&documentOnly, "document", "Only include Document requests")
-	cmd.Flags().Var(&cssOnly, "css", "Only include CSS requests")
-	cmd.Flags().Var(&scriptOnly, "script", "Only include Script requests")
-	cmd.Flags().Var(&fontOnly, "font", "Only include Font requests")
-	cmd.Flags().Var(&imgOnly, "img", "Only include Image requests")
-	cmd.Flags().Var(&mediaOnly, "media", "Only include Media requests")
-	cmd.Flags().Var(&manifestOnly, "manifest", "Only include Manifest requests")
-	cmd.Flags().Var(&websocketOnly, "socket", "Only include WebSocket requests")
-	cmd.Flags().VarP(&minSize, "min-size", "", "Only include requests whose size is at least this many bytes")
-	cmd.Flags().VarP(&maxSize, "max-size", "", "Only include requests whose size is at most this many bytes")
-	cmd.Flags().VarP(&quiet, "quiet", "q", "Suppress progress messages, only show data")
-	cmd.Flags().Var(&noRotateFingerprints, "no-rotate-fingerprints", "Disable fingerprint rotation (default: enabled)")
-	cmd.Flags().Var(&fingerprintInterval, "fingerprint-interval", "Interval in milliseconds for fingerprint rotation")
-	cmd.Flags().Var(&harOutput, "har", "Output in HAR (HTTP Archive) format")
+	allFlags := []flags.FlagConfig{
+		{Flag: &showLogs, Name: "logs", Short: "L", Desc: "Show console logs", Value: false},
+		{Flag: &showNetwork, Name: "network", Short: "N", Desc: "Show network requests", Value: false},
+		{Flag: &jsonOutput, Name: "json", Short: "J", Desc: "Output in JSON format", Value: false},
+		{Flag: &yamlOutput, Name: "yaml", Short: "", Desc: "Output in YAML format", Value: false},
+		{Flag: &csvOutput, Name: "csv", Short: "", Desc: "Output in CSV format", Value: false},
+		{Flag: &versionFlag, Name: "version", Short: "v", Desc: "Show version information", Value: false},
+		{Flag: &verbose, Name: "verbose", Short: "V", Desc: "Show detailed HTTP protocol information", Value: false},
+		{Flag: &appendMode, Name: "append", Short: "a", Desc: "Append to file instead of overwriting", Value: false},
+		{Flag: &followMode, Name: "follow", Short: "f", Desc: "Stream logs and network requests in real-time", Value: false},
+		{Flag: &skipSSLVerify, Name: "insecure", Short: "k", Desc: "Skip SSL certificate verification (useful for self-signed certificates)", Value: false},
+		{Flag: &noColor, Name: "no-color", Short: "", Desc: "Disable colored output", Value: false},
+		{Flag: &xhrOnly, Name: "xhr", Short: "", Desc: "Only include fetch/XHR requests", Value: false},
+		{Flag: &documentOnly, Name: "document", Short: "", Desc: "Only include Document requests", Value: false},
+		{Flag: &cssOnly, Name: "css", Short: "", Desc: "Only include CSS requests", Value: false},
+		{Flag: &scriptOnly, Name: "script", Short: "", Desc: "Only include Script requests", Value: false},
+		{Flag: &fontOnly, Name: "font", Short: "", Desc: "Only include Font requests", Value: false},
+		{Flag: &imgOnly, Name: "img", Short: "", Desc: "Only include Image requests", Value: false},
+		{Flag: &mediaOnly, Name: "media", Short: "", Desc: "Only include Media requests", Value: false},
+		{Flag: &manifestOnly, Name: "manifest", Short: "", Desc: "Only include Manifest requests", Value: false},
+		{Flag: &websocketOnly, Name: "socket", Short: "", Desc: "Only include WebSocket requests", Value: false},
+		{Flag: &quiet, Name: "quiet", Short: "q", Desc: "Suppress progress messages, only show data", Value: false},
+		{Flag: &noRotateFingerprints, Name: "no-rotate-fingerprints", Short: "", Desc: "Disable fingerprint rotation (default: enabled)", Value: false},
+		{Flag: &harOutput, Name: "har", Short: "", Desc: "Output in HAR (HTTP Archive) format", Value: false},
+		{Flag: &timeout, Name: "timeout", Short: "T", Desc: "Timeout in milliseconds", Value: 60000},
+		{Flag: &wait, Name: "wait", Short: "W", Desc: "Wait time in milliseconds after page load", Value: 100},
+		{Flag: &refreshInterval, Name: "refresh", Short: "", Desc: "Refresh interval in milliseconds for real-time streaming", Value: 100},
+		{Flag: &fingerprintInterval, Name: "fingerprint-interval", Short: "", Desc: "Interval in milliseconds for fingerprint rotation", Value: 5000},
+		{Flag: &userAgent, Name: "user-agent", Short: "A", Desc: "Set User-Agent header", Value: "logget/1.0"},
+		{Flag: &outputFile, Name: "output", Short: "o", Desc: "Write to file instead of stdout", Value: ""},
+		{Flag: &filterPattern, Name: "filter", Short: "", Desc: "Show only logs/requests matching this regex pattern", Value: ""},
+		{Flag: &excludePattern, Name: "exclude", Short: "", Desc: "Exclude logs/requests matching this regex pattern", Value: ""},
+		{Flag: &statusPattern, Name: "status", Short: "", Desc: "Only include requests whose HTTP status code matches this regex pattern", Value: ""},
+		{Flag: &domainPattern, Name: "domain", Short: "", Desc: "Only include requests whose domain matches this regex pattern", Value: ""},
+		{Flag: &mimePattern, Name: "mime", Short: "", Desc: "Only include requests whose MIME type matches this regex pattern", Value: ""},
+		{Flag: &headers, Name: "header", Short: "H", Desc: "Add custom headers (format: 'Key: Value') or filename containing headers", Value: []string{}},
+		{Flag: &cookies, Name: "cookie", Short: "C", Desc: "Add cookies (format: 'name=value' or 'name=value; domain=example.com') or filename containing cookies", Value: []string{}},
+		{Flag: &minSize, Name: "min-size", Short: "", Desc: "Only include requests whose size is at least this many bytes", Value: int64(0)},
+		{Flag: &maxSize, Name: "max-size", Short: "", Desc: "Only include requests whose size is at most this many bytes", Value: int64(0)},
+	}
+	for _, f := range allFlags {
+		flags.RegisterFlag(cmd, f)
+	}
 }
 
 func runLogget(cmd *cobra.Command, args []string) {

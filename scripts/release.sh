@@ -8,11 +8,7 @@ set -e
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-COLORS_GO="$PROJECT_ROOT/src/colors.go"
 COLORS_SH="$SCRIPT_DIR/colors.sh"
-if [ ! -f "$COLORS_SH" ] || [ "$COLORS_GO" -nt "$COLORS_SH" ]; then
-    "$SCRIPT_DIR/generate_colors.sh"
-fi
 source "$COLORS_SH"
 
 # Configuration

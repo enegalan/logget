@@ -1,4 +1,4 @@
-.PHONY: build clean test install uninstall release deps help generate-colors
+.PHONY: build clean test install uninstall release deps help
 
 BINARY_NAME=logget
 VERSION=$(shell cat VERSION 2>/dev/null || echo "dev")
@@ -27,7 +27,7 @@ ifeq ($(UNAME_M),aarch64)
 	GOARCH := arm64
 endif
 
-all: generate-colors build
+all: build
 
 build:
 	@echo "Building $(BINARY_NAME) for $(GOOS)/$(GOARCH)..."
@@ -72,10 +72,6 @@ release:
 	@echo "Creating release packages..."
 	@cd scripts && ./release.sh
 
-generate-colors:
-	@echo "Generating colors.sh from src/colors.go..."
-	@./scripts/generate_colors.sh
-
 help:
 	@echo "Available targets:"
 	@echo "  build           - Build for current platform"
@@ -86,5 +82,4 @@ help:
 	@echo "  install         - Install binary to system"
 	@echo "  uninstall       - Remove binary from system"
 	@echo "  release         - Create release packages (ZIP and TAR.GZ)"
-	@echo "  generate-colors - Generate scripts/colors.sh from src/colors.go"
 	@echo "  help            - Show this help"
