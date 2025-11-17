@@ -21,7 +21,6 @@ fi
 
 BINARY_NAME="logget"
 GITHUB_REPO="enegalan/logget"
-INSTALL_DIR="/usr/local/bin"
 TEMP_DIR=$(mktemp -d)
 
 cleanup() {
@@ -36,17 +35,54 @@ error_exit() {
     exit 1
 }
 
+detect_install_dir() {
+    if [ -n "$LOGGET_INSTALL_DIR" ]; then
+        echo "$LOGGET_INSTALL_DIR"
+    elif [ -w "/usr/local/bin" ] 2>/dev/null; then
+        echo "/usr/local/bin"
+    elif [ "$(id -u)" = "0" ]; then
+        echo "/usr/local/bin"
+    elif [ -d "$HOME/bin" ] && [ -w "$HOME/bin" ]; then
+        echo "$HOME/bin"
+    elif [ -d "$HOME/.local/bin" ] && [ -w "$HOME/.local/bin" ]; then
+        echo "$HOME/.local/bin"
+    else
+        mkdir -p "$HOME/bin" 2>/dev/null || error_exit "Cannot create install directory. Please set LOGGET_INSTALL_DIR environment variable."
+        echo "$HOME/bin"
+    fi
+}
+
+INSTALL_DIR=$(detect_install_dir)
+USE_SUDO=false
+if [ "$INSTALL_DIR" = "/usr/local/bin" ] && ! [ -w "/usr/local/bin" ] 2>/dev/null && [ "$(id -u)" != "0" ] && command -v sudo >/dev/null 2>&1; then
+    USE_SUDO=true
+fi
+
 uninstall_logget() {
-    echo -e "${YELLOW}Uninstalling $BINARY_NAME from $INSTALL_DIR...${NC}"
-    if [ -f "$INSTALL_DIR/$BINARY_NAME" ]; then
-        if sudo rm -f "$INSTALL_DIR/$BINARY_NAME"; then
-            echo -e "${GREEN}Uninstallation complete!${NC}"
-            echo -e "${BLUE}Removed: ${GREEN}$INSTALL_DIR/$BINARY_NAME${NC}"
+    local uninstall_dir=$(detect_install_dir)
+    echo -e "${YELLOW}Uninstalling $BINARY_NAME from $uninstall_dir...${NC}"
+    if [ -f "$uninstall_dir/$BINARY_NAME" ]; then
+        local use_sudo_uninstall=false
+        if [ "$uninstall_dir" = "/usr/local/bin" ] && ! [ -w "$uninstall_dir" ] 2>/dev/null && [ "$(id -u)" != "0" ] && command -v sudo >/dev/null 2>&1; then
+            use_sudo_uninstall=true
+        fi
+        if [ "$use_sudo_uninstall" = true ]; then
+            if sudo rm -f "$uninstall_dir/$BINARY_NAME"; then
+                echo -e "${GREEN}Uninstallation complete!${NC}"
+                echo -e "${BLUE}Removed: ${GREEN}$uninstall_dir/$BINARY_NAME${NC}"
+            else
+                error_exit "Failed to remove binary"
+            fi
         else
-            error_exit "Failed to remove binary (sudo required)"
+            if rm -f "$uninstall_dir/$BINARY_NAME"; then
+                echo -e "${GREEN}Uninstallation complete!${NC}"
+                echo -e "${BLUE}Removed: ${GREEN}$uninstall_dir/$BINARY_NAME${NC}"
+            else
+                error_exit "Failed to remove binary"
+            fi
         fi
     else
-        echo -e "${YELLOW}$BINARY_NAME is not installed in $INSTALL_DIR${NC}"
+        echo -e "${YELLOW}$BINARY_NAME is not installed in $uninstall_dir${NC}"
         exit 0
     fi
 }
@@ -233,12 +269,20 @@ fi
 
 # Install binary
 echo -e "${YELLOW}Installing to $INSTALL_DIR/$BINARY_NAME...${NC}"
-if ! sudo cp "$BINARY_PATH" "$INSTALL_DIR/$BINARY_NAME"; then
-    error_exit "Failed to install binary (sudo required)"
-fi
-
-if ! sudo chmod +x "$INSTALL_DIR/$BINARY_NAME"; then
-    error_exit "Failed to set executable permissions"
+if [ "$USE_SUDO" = true ]; then
+    if ! sudo cp "$BINARY_PATH" "$INSTALL_DIR/$BINARY_NAME"; then
+        error_exit "Failed to install binary"
+    fi
+    if ! sudo chmod +x "$INSTALL_DIR/$BINARY_NAME"; then
+        error_exit "Failed to set executable permissions"
+    fi
+else
+    if ! cp "$BINARY_PATH" "$INSTALL_DIR/$BINARY_NAME"; then
+        error_exit "Failed to install binary"
+    fi
+    if ! chmod +x "$INSTALL_DIR/$BINARY_NAME"; then
+        error_exit "Failed to set executable permissions"
+    fi
 fi
 
 # Verify installation
@@ -247,6 +291,11 @@ if [ -f "$INSTALL_DIR/$BINARY_NAME" ] && [ -x "$INSTALL_DIR/$BINARY_NAME" ]; the
     echo -e "${GREEN}Installation complete!${NC}"
     echo -e "${BLUE}Installed version: ${GREEN}$INSTALLED_VERSION${NC}"
     echo -e "${BLUE}Binary location: ${GREEN}$INSTALL_DIR/$BINARY_NAME${NC}"
+    if [[ "$INSTALL_DIR" == "$HOME"* ]] && [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+        echo -e "${YELLOW}Note: $INSTALL_DIR is not in your PATH.${NC}"
+        echo -e "${YELLOW}Add this line to your shell profile (~/.bashrc, ~/.zshrc, etc.):${NC}"
+        echo -e "${BLUE}export PATH=\"\$PATH:$INSTALL_DIR\"${NC}"
+    fi
 else
     error_exit "Installation verification failed"
 fi
