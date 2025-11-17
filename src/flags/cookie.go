@@ -1,7 +1,7 @@
 package flags
 
 import (
-	helpers "logget/src"
+	"logget/src/io"
 	"strings"
 )
 
@@ -29,7 +29,7 @@ func (c *CookieArray) Set(value string) error {
 		}
 		return ""
 	}
-	lines, _, err := helpers.TryReadAsFile(value, "=",
+	lines, _, err := io.TryReadAsFile(value, "=",
 		func(val string) bool { return strings.Contains(val, "=") || val != "" },
 		func(line string) bool { return strings.Contains(line, "\t") || strings.Contains(line, "=") },
 		processCookieLine)

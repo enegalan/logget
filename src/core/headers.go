@@ -1,4 +1,4 @@
-package helpers
+package core
 
 import (
 	"context"
@@ -10,14 +10,14 @@ import (
 )
 
 type headerDef struct {
-	name         string
-	getDefault   func(cfg Config, url string) string
-	httpsOnly    bool
+	name       string
+	getDefault func() string
+	httpsOnly  bool
 }
 
-func GenerateHeaders(cfg Config, url string) []string {
+func GenerateHeaders(userAgent string, headers []string, url string) []string {
 	customHeaderMap := make(map[string]string)
-	for _, header := range cfg.Headers {
+	for _, header := range headers {
 		if colonIndex := strings.Index(header, ":"); colonIndex != -1 {
 			key := strings.TrimSpace(header[:colonIndex])
 			value := strings.TrimSpace(header[colonIndex+1:])
@@ -30,7 +30,7 @@ func GenerateHeaders(cfg Config, url string) []string {
 		}
 		return defaultValue
 	}
-	getAcceptDefault := func(url string) string {
+	getAcceptDefault := func() string {
 		if strings.Contains(url, ".json") || strings.Contains(url, "/api/") || strings.Contains(url, "api.") {
 			return "application/json,text/plain,*/*"
 		}
@@ -40,18 +40,18 @@ func GenerateHeaders(cfg Config, url string) []string {
 		return "*/*"
 	}
 	defaultHeaders := []headerDef{
-		{"User-Agent", func(cfg Config, url string) string { return cfg.UserAgent }, false},
-		{"Accept", func(cfg Config, url string) string { return getAcceptDefault(url) }, false},
-		{"Accept-Language", func(cfg Config, url string) string { return "en-US,en;q=0.5" }, false},
-		{"Accept-Encoding", func(cfg Config, url string) string { return "gzip, deflate" }, false},
-		{"Connection", func(cfg Config, url string) string { return "keep-alive" }, false},
-		{"Upgrade-Insecure-Requests", func(cfg Config, url string) string { return "1" }, true},
-		{"Sec-Fetch-Dest", func(cfg Config, url string) string { return "document" }, true},
-		{"Sec-Fetch-Mode", func(cfg Config, url string) string { return "navigate" }, true},
-		{"Sec-Fetch-Site", func(cfg Config, url string) string { return "none" }, true},
-		{"Cache-Control", func(cfg Config, url string) string { return "max-age=0" }, false},
+		{"User-Agent", func() string { return userAgent }, false},
+		{"Accept", getAcceptDefault, false},
+		{"Accept-Language", func() string { return "en-US,en;q=0.5" }, false},
+		{"Accept-Encoding", func() string { return "gzip, deflate" }, false},
+		{"Connection", func() string { return "keep-alive" }, false},
+		{"Upgrade-Insecure-Requests", func() string { return "1" }, true},
+		{"Sec-Fetch-Dest", func() string { return "document" }, true},
+		{"Sec-Fetch-Mode", func() string { return "navigate" }, true},
+		{"Sec-Fetch-Site", func() string { return "none" }, true},
+		{"Cache-Control", func() string { return "max-age=0" }, false},
 	}
-	var headers []string
+	var result []string
 	processedKeys := make(map[string]bool)
 	for _, def := range defaultHeaders {
 		if def.httpsOnly && !strings.HasPrefix(url, "https://") {
@@ -59,18 +59,18 @@ func GenerateHeaders(cfg Config, url string) []string {
 		}
 		key := strings.ToLower(def.name)
 		processedKeys[key] = true
-		defaultValue := def.getDefault(cfg, url)
-		headers = append(headers, fmt.Sprintf("%s: %s", def.name, getHeader(key, defaultValue)))
+		defaultValue := def.getDefault()
+		result = append(result, fmt.Sprintf("%s: %s", def.name, getHeader(key, defaultValue)))
 	}
-	for _, header := range cfg.Headers {
+	for _, header := range headers {
 		if colonIndex := strings.Index(header, ":"); colonIndex != -1 {
 			key := strings.ToLower(strings.TrimSpace(header[:colonIndex]))
 			if !processedKeys[key] {
-				headers = append(headers, header)
+				result = append(result, header)
 			}
 		}
 	}
-	return headers
+	return result
 }
 
 func SetHeaders(ctx context.Context, userAgent string, headers []string) error {

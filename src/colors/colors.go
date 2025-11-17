@@ -1,4 +1,4 @@
-package helpers
+package colors
 
 import (
 	_ "embed"

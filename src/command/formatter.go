@@ -1,4 +1,4 @@
-package helpers
+package command
 
 import (
 	"bytes"
@@ -9,6 +9,8 @@ import (
 	"time"
 
 	chrome "logget/src/chrome"
+	"logget/src/colors"
+	"logget/src/io"
 )
 
 var (
@@ -43,12 +45,10 @@ var (
 	defaultHTTPMethodSymbol = "🌐"
 )
 
-type OutputFormatter struct {
-	theme *ColorTheme
-}
+type OutputFormatter struct{ theme *colors.ColorTheme }
 
-func NewOutputFormatter(colors bool) *OutputFormatter {
-	return &OutputFormatter{theme: GetTheme(colors)}
+func NewOutputFormatter(enableColors bool) *OutputFormatter {
+	return &OutputFormatter{theme: colors.GetTheme(enableColors)}
 }
 
 func (f *OutputFormatter) FormatHTTPResponse(protocol string, statusCode int, duration time.Duration) string {
@@ -70,7 +70,7 @@ func (f *OutputFormatter) FormatRequestHeaders(headers []string) string {
 	sb.WriteString(f.theme.FormatHeader("REQUEST HEADERS"))
 	sb.WriteString(" ===\n")
 	for _, header := range headers {
-		sb.WriteString(f.theme.Colorize(Yellow, header))
+		sb.WriteString(f.theme.Colorize(colors.Yellow, header))
 		sb.WriteString("\n")
 	}
 	return sb.String()
@@ -127,17 +127,17 @@ func (f *OutputFormatter) FormatNetworkRequests(network []chrome.NetworkEntry) s
 	for _, net := range network {
 		sb.WriteString(f.theme.Bold(net.Method))
 		sb.WriteString(" ")
-		sb.WriteString(f.theme.Colorize(Cyan, net.URL))
+		sb.WriteString(f.theme.Colorize(colors.Cyan, net.URL))
 		sb.WriteString(" -> ")
 		if net.Error != "" {
-			errorColor := Red
+			errorColor := colors.Red
 			switch net.ErrorType {
 			case "timeout":
-				errorColor = Red
+				errorColor = colors.Red
 			case "cors":
-				errorColor = Yellow
+				errorColor = colors.Yellow
 			case "dns":
-				errorColor = Magenta
+				errorColor = colors.Magenta
 			}
 			sb.WriteString(f.theme.Colorize(errorColor, fmt.Sprintf("ERROR: %s (%s)", net.Error, net.ErrorType)))
 		} else {
@@ -146,7 +146,7 @@ func (f *OutputFormatter) FormatNetworkRequests(network []chrome.NetworkEntry) s
 		sb.WriteString("\n")
 		for k, v := range net.Headers {
 			sb.WriteString("  ")
-			sb.WriteString(f.theme.Colorize(Yellow, k))
+			sb.WriteString(f.theme.Colorize(colors.Yellow, k))
 			sb.WriteString(": ")
 			sb.WriteString(v)
 			sb.WriteString("\n")
@@ -209,7 +209,12 @@ func (f *OutputFormatter) FormatAndOutputLog(le chrome.LogEntry, cfg Config) err
 	if levelSymbol == "" {
 		levelSymbol = defaultLogLevelSymbol
 	}
-	return WriteOutput(cfg, fmt.Sprintf("[%s] %s %s %s: %s\n",
+	return io.WriteOutput(io.WriteConfig{
+		OutputWriter: cfg.OutputWriter,
+		OutputFile:   cfg.OutputFile,
+		AppendMode:   cfg.AppendMode,
+		FollowMode:   cfg.FollowMode,
+	}, fmt.Sprintf("[%s] %s %s %s: %s\n",
 		f.FormatTimestamp(le.Time.Format("15:04:05")), f.FormatConsolePrefix(),
 		f.Colorize(levelColor, levelSymbol), f.Colorize(levelColor, level), le.Message))
 }
@@ -222,20 +227,25 @@ func (f *OutputFormatter) FormatAndOutputNetwork(ne chrome.NetworkEntry, cfg Con
 	}
 	var statusOrError string
 	if ne.Error != "" {
-		errorColor := Red
+		errorColor := colors.Red
 		switch ne.ErrorType {
 		case "timeout":
-			errorColor = Red
+			errorColor = colors.Red
 		case "cors":
-			errorColor = Yellow
+			errorColor = colors.Yellow
 		case "dns":
-			errorColor = Magenta
+			errorColor = colors.Magenta
 		}
 		statusOrError = f.Colorize(errorColor, fmt.Sprintf("ERROR: %s (%s)", ne.Error, ne.ErrorType))
 	} else {
 		statusOrError = f.Colorize(f.GetStatusColor(ne.Status), strconv.Itoa(ne.Status))
 	}
-	return WriteOutput(cfg, fmt.Sprintf("[%s] %s %s %s %s %s\n",
+	return io.WriteOutput(io.WriteConfig{
+		OutputWriter: cfg.OutputWriter,
+		OutputFile:   cfg.OutputFile,
+		AppendMode:   cfg.AppendMode,
+		FollowMode:   cfg.FollowMode,
+	}, fmt.Sprintf("[%s] %s %s %s %s %s\n",
 		f.FormatTimestamp(ne.Timestamp.Format("15:04:05")), f.FormatNetworkPrefix(),
 		f.Colorize(methodColor, methodSymbol), f.Colorize(methodColor, ne.Method), ne.URL, statusOrError))
 }
@@ -298,7 +308,12 @@ func (f *OutputFormatter) formatAndOutputCSVRow(header []string, row []string, i
 	}
 	w.Write(row)
 	w.Flush()
-	return WriteOutput(cfg, buf.String())
+	return io.WriteOutput(io.WriteConfig{
+		OutputWriter: cfg.OutputWriter,
+		OutputFile:   cfg.OutputFile,
+		AppendMode:   cfg.AppendMode,
+		FollowMode:   cfg.FollowMode,
+	}, buf.String())
 }
 
 func (f *OutputFormatter) FormatAndOutputLogCSVRow(le chrome.LogEntry, cfg Config, includeHeader bool) error {

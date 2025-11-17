@@ -1,4 +1,4 @@
-package helpers
+package io
 
 import (
 	"fmt"
@@ -54,15 +54,27 @@ func (w *OutputWriter) Close() error {
 	return w.file.Close()
 }
 
-func getFileOpenFlags(cfg Config, filePath string) (int, error) {
-	if cfg.FollowMode {
-		if !fileWriteState[filePath] && !cfg.AppendMode {
+type WriteConfig struct {
+	OutputWriter OutputWriterInterface
+	OutputFile   string
+	AppendMode   bool
+	FollowMode   bool
+}
+
+type OutputWriterInterface interface {
+	Write(content string) error
+	Close() error
+}
+
+func getFileOpenFlags(followMode, appendMode bool, filePath string) (int, error) {
+	if followMode {
+		if !fileWriteState[filePath] && !appendMode {
 			fileWriteState[filePath] = true
 			return os.O_CREATE | os.O_WRONLY | os.O_TRUNC, nil
 		}
 		return os.O_CREATE | os.O_WRONLY | os.O_APPEND, nil
 	}
-	if cfg.AppendMode {
+	if appendMode {
 		return os.O_CREATE | os.O_WRONLY | os.O_APPEND, nil
 	}
 	if _, err := os.Stat(filePath); err == nil {
@@ -71,7 +83,7 @@ func getFileOpenFlags(cfg Config, filePath string) (int, error) {
 	return 0, os.ErrNotExist
 }
 
-func WriteOutput(cfg Config, content string) error {
+func WriteOutput(cfg WriteConfig, content string) error {
 	if cfg.OutputWriter != nil {
 		return cfg.OutputWriter.Write(content)
 	}
@@ -80,7 +92,7 @@ func WriteOutput(cfg Config, content string) error {
 		return nil
 	}
 	filePath := cfg.OutputFile
-	flags, flagErr := getFileOpenFlags(cfg, filePath)
+	flags, flagErr := getFileOpenFlags(cfg.FollowMode, cfg.AppendMode, filePath)
 	if flagErr == os.ErrNotExist {
 		file, err := os.Create(filePath)
 		if err != nil {
@@ -106,12 +118,18 @@ func WriteOutput(cfg Config, content string) error {
 	return nil
 }
 
-func LogOutputFileSuccess(cfg Config, outputType string, logger *Logger) {
-	filePath := cfg.OutputFile
-	if cfg.AppendMode {
-		logger.Success("%s appended to: %s", outputType, filePath)
+type LoggerInterface interface {
+	Success(format string, args ...interface{})
+}
+
+func LogOutputFileSuccess(outputFile string, appendMode bool, outputType string, logger LoggerInterface) {
+	if logger == nil {
+		return
+	}
+	if appendMode {
+		logger.Success("%s appended to: %s", outputType, outputFile)
 	} else {
-		logger.Success("%s written to: %s", outputType, filePath)
+		logger.Success("%s written to: %s", outputType, outputFile)
 	}
 }
 
@@ -127,6 +145,8 @@ func WriteHAROutput(filePath string, harData []byte) error {
 	return nil
 }
 
-func LogHARFileSuccess(filePath string, logger *Logger) {
-	logger.Success("HAR file written to: %s", filePath)
+func LogHARFileSuccess(filePath string, logger LoggerInterface) {
+	if logger != nil {
+		logger.Success("HAR file written to: %s", filePath)
+	}
 }

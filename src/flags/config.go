@@ -14,11 +14,22 @@ type FlagConfig struct {
 }
 
 func RegisterFlag(cmd *cobra.Command, cfg FlagConfig) {
-	switch v := cfg.Value.(type) {
-	case bool:
-		if boolFlag, ok := cfg.Flag.(*BoolFlag); ok {
+	if boolFlag, ok := cfg.Flag.(*BoolFlag); ok {
+		defaultValue := false
+		if v, ok := cfg.Value.(bool); ok {
+			defaultValue = v
 			boolFlag.SetDefault(v)
 		}
+		boolPtr := boolFlag.GetBoolPtr()
+		*boolPtr = defaultValue
+		if cfg.Short != "" {
+			cmd.Flags().BoolVarP(boolPtr, cfg.Name, cfg.Short, defaultValue, cfg.Desc)
+		} else {
+			cmd.Flags().BoolVar(boolPtr, cfg.Name, defaultValue, cfg.Desc)
+		}
+		return
+	}
+	switch v := cfg.Value.(type) {
 	case int:
 		if intFlag, ok := cfg.Flag.(interface{ SetDefault(int) }); ok {
 			intFlag.SetDefault(v)
@@ -40,10 +51,5 @@ func RegisterFlag(cmd *cobra.Command, cfg FlagConfig) {
 		cmd.Flags().VarP(cfg.Flag, cfg.Name, cfg.Short, cfg.Desc)
 	} else {
 		cmd.Flags().Var(cfg.Flag, cfg.Name, cfg.Desc)
-	}
-	if _, ok := cfg.Flag.(*BoolFlag); ok {
-		if flag := cmd.Flags().Lookup(cfg.Name); flag != nil {
-			flag.NoOptDefVal = "true"
-		}
 	}
 }

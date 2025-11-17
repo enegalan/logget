@@ -1,4 +1,4 @@
-package helpers
+package core
 
 import (
 	"context"
@@ -9,6 +9,22 @@ import (
 
 	"github.com/chromedp/chromedp"
 )
+
+type fingerprintConfig struct {
+	UserAgent           string   `json:"userAgent"`
+	Platform            string   `json:"platform"`
+	Language            string   `json:"language"`
+	Languages           []string `json:"languages"`
+	ScreenWidth         int      `json:"screenWidth"`
+	ScreenHeight        int      `json:"screenHeight"`
+	ColorDepth          int      `json:"colorDepth"`
+	PixelDepth          int      `json:"pixelDepth"`
+	HardwareConcurrency int      `json:"hardwareConcurrency"`
+	DeviceMemory        int      `json:"deviceMemory"`
+	MaxTouchPoints      int      `json:"maxTouchPoints"`
+	WebGLVendor         string   `json:"webglVendor"`
+	WebGLRenderer       string   `json:"webglRenderer"`
+}
 
 func RotateNavigatorFingerprints(ctx context.Context, intervalMs int) error {
 	fingerprint := generateFingerprint()
@@ -170,22 +186,6 @@ func StartFingerprintRotation(ctx context.Context, intervalMs int) error {
 		}
 	}()
 	return nil
-}
-
-type fingerprintConfig struct {
-	UserAgent           string   `json:"userAgent"`
-	Platform            string   `json:"platform"`
-	Language            string   `json:"language"`
-	Languages           []string `json:"languages"`
-	ScreenWidth         int      `json:"screenWidth"`
-	ScreenHeight        int      `json:"screenHeight"`
-	ColorDepth          int      `json:"colorDepth"`
-	PixelDepth          int      `json:"pixelDepth"`
-	HardwareConcurrency int      `json:"hardwareConcurrency"`
-	DeviceMemory        int      `json:"deviceMemory"`
-	MaxTouchPoints      int      `json:"maxTouchPoints"`
-	WebGLVendor         string   `json:"webglVendor"`
-	WebGLRenderer       string   `json:"webglRenderer"`
 }
 
 func generateFingerprint() fingerprintConfig {

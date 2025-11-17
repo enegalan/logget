@@ -2,7 +2,7 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-COLORS_DEF="$PROJECT_ROOT/src/colors.def"
+COLORS_DEF="$PROJECT_ROOT/src/colors/colors.def"
 
 if [ ! -f "$COLORS_DEF" ]; then
 	echo "Error: $COLORS_DEF not found" >&2

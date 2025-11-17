@@ -129,14 +129,36 @@ download_file() {
 get_latest_version() {
     local api_url="https://api.github.com/repos/$GITHUB_REPO/releases/latest"
     local version
+    local response
+    local response_file="$TEMP_DIR/github_api_response.json"
+    local http_code
     echo -e "${YELLOW}Fetching latest version...${NC}" >&2
     if [ "$DOWNLOAD_CMD" = "curl" ]; then
-        version=$(curl -fsSL "$api_url" | grep -o '"tag_name": "[^"]*' | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+' | head -1)
+        http_code=$(curl -sSL -o "$response_file" -w "%{http_code}" "$api_url" 2>&1)
+        if [ $? -ne 0 ] || [ "$http_code" != "200" ]; then
+            if [ -f "$response_file" ]; then
+                local error_msg=$(grep -o '"message": "[^"]*' "$response_file" | sed 's/"message": "//' | head -1)
+                if [ -n "$error_msg" ]; then
+                    error_exit "GitHub API error: $error_msg"
+                fi
+            fi
+            error_exit "Failed to fetch latest version from GitHub API (HTTP $http_code). Check your internet connection and GitHub availability."
+        fi
+        response=$(cat "$response_file")
+        version=$(echo "$response" | grep -o '"tag_name": "[^"]*' | sed 's/"tag_name": "//' | sed 's/^v//' | head -1)
     else
-        version=$(wget -q -O - "$api_url" | grep -o '"tag_name": "[^"]*' | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+' | head -1)
+        response=$(wget -q -O - "$api_url" 2>&1)
+        if [ $? -ne 0 ] || [ -z "$response" ] || echo "$response" | grep -q '"message"'; then
+            local error_msg=$(echo "$response" | grep -o '"message": "[^"]*' | sed 's/"message": "//' | head -1)
+            if [ -n "$error_msg" ]; then
+                error_exit "GitHub API error: $error_msg"
+            fi
+            error_exit "Failed to fetch latest version from GitHub API. Check your internet connection and GitHub availability."
+        fi
+        version=$(echo "$response" | grep -o '"tag_name": "[^"]*' | sed 's/"tag_name": "//' | sed 's/^v//' | head -1)
     fi
     if [ -z "$version" ]; then
-        error_exit "Failed to fetch latest version from GitHub"
+        error_exit "Failed to parse version from GitHub API response. The repository might not have any releases yet."
     fi
     echo "$version"
 }

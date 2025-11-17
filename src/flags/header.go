@@ -1,7 +1,7 @@
 package flags
 
 import (
-	helpers "logget/src"
+	"logget/src/io"
 	"strings"
 )
 
@@ -12,7 +12,7 @@ type HeaderArray struct {
 func (h *HeaderArray) Type() string { return "<header|file>" }
 
 func (h *HeaderArray) Set(value string) error {
-	lines, _, err := helpers.TryReadAsFile(value, ":", func(val string) bool { return strings.Contains(val, ":") || val != "" },
+	lines, _, err := io.TryReadAsFile(value, ":", func(val string) bool { return strings.Contains(val, ":") || val != "" },
 		func(line string) bool { return strings.Contains(line, ":") }, func(line string) string { return line })
 	if err != nil {
 		return err

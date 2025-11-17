@@ -6,42 +6,42 @@ import (
 	"os"
 	"os/signal"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
-	helpers "logget/src"
 	chrome "logget/src/chrome"
+	"logget/src/core"
 	"logget/src/flags"
+	helpers "logget/src/helpers"
+	"logget/src/io"
 
-	cdpnetwork "github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 )
 
-func RunLogget(cmdConfig CommandConfig, url string) {
-	logger, formatter, cfg := initializeCommand(cmdConfig, url)
-	chromeCtx, chromeCancel, url := setupChromeContext(cmdConfig, url, logger)
+func RunLogget(cfg Config, url string) {
+	logger, formatter, cfg := initCommand(cfg, url)
+	chromeCtx, chromeCancel, url := setupChromeContext(cfg, url, logger)
 	defer chromeCancel()
 	initialProtocol, initialStatusCode := getInitialResponse(cfg, url, logger)
 	state := initializeState(initialProtocol, initialStatusCode)
-	enableChromeDomains(chromeCtx, cmdConfig, logger)
-	syncMaps := initializeSyncMaps()
-	handlers := createEventHandlers(cmdConfig, url, state, syncMaps)
-	setupEventListeners(chromeCtx, cmdConfig, url, cfg, state, syncMaps, handlers)
-	configureHeadersAndCookies(chromeCtx, cmdConfig, url, logger)
-	if cmdConfig.FollowMode {
-		runFollowMode(cfg, cmdConfig, url, logger, formatter)
+	enableChromeDomains(chromeCtx, cfg, logger)
+	syncMaps := helpers.NewSyncMaps()
+	handlers := createEventHandlers(cfg, url, state, syncMaps)
+	setupEventListeners(chromeCtx, cfg, url, state, syncMaps, handlers)
+	setupHeadersAndCookies(chromeCtx, cfg, url, logger)
+	if cfg.FollowMode {
+		runFollowMode(cfg, url, logger, formatter)
 		return
 	}
-	runNormalMode(chromeCtx, cmdConfig, cfg, url, state, logger, formatter)
+	runNormalMode(chromeCtx, cfg, url, state, logger, formatter)
 }
 
-func initializeCommand(cmdConfig CommandConfig, url string) (*helpers.Logger, *helpers.OutputFormatter, helpers.Config) {
-	logger := helpers.NewLogger(cmdConfig.Verbose, !cmdConfig.NoColor)
-	logger.SetQuiet(cmdConfig.Quiet)
-	formatter := helpers.NewOutputFormatter(!cmdConfig.NoColor)
-	if cmdConfig.VersionFlag {
-		logger.PrintHeader(cmdConfig.Version)
+func initCommand(cfg Config, url string) (*core.Logger, *OutputFormatter, Config) {
+	logger := core.NewLogger(cfg.Verbose, !cfg.NoColor)
+	logger.SetQuiet(cfg.Quiet)
+	formatter := NewOutputFormatter(!cfg.NoColor)
+	if cfg.VersionFlag {
+		logger.PrintHeader(cfg.Version)
 		os.Exit(0)
 	}
 	if url == "" {
@@ -49,9 +49,9 @@ func initializeCommand(cmdConfig CommandConfig, url string) (*helpers.Logger, *h
 		logger.PrintUsage()
 		os.Exit(1)
 	}
-	validateOutputFormats(cmdConfig)
-	cfg := buildConfig(cmdConfig)
-	hasAnyOutput := cmdConfig.ShowLogs || cmdConfig.ShowNetwork || cmdConfig.Verbose || cmdConfig.JSONOutput || cmdConfig.YAMLOutput || cmdConfig.HAROutput || cmdConfig.FollowMode
+	ValidateOutputFormats(cfg)
+	cfg = compileConfigRegexp(cfg)
+	hasAnyOutput := cfg.ShowLogs || cfg.ShowNetwork || cfg.Verbose || cfg.JSONOutput || cfg.YAMLOutput || cfg.HAROutput || cfg.FollowMode
 	if !hasAnyOutput {
 		logger.PrintUsage()
 		os.Exit(0)
@@ -59,10 +59,10 @@ func initializeCommand(cmdConfig CommandConfig, url string) (*helpers.Logger, *h
 	return logger, formatter, cfg
 }
 
-func setupChromeContext(cmdConfig CommandConfig, url string, logger *helpers.Logger) (context.Context, context.CancelFunc, string) {
+func setupChromeContext(cfg Config, url string, logger *core.Logger) (context.Context, context.CancelFunc, string) {
 	url = helpers.NormalizeURL(url)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cmdConfig.Timeout)*time.Millisecond)
-	chromeCtx, chromeCancel, err := chrome.CreateChromeContext(ctx, cmdConfig.SkipSSLVerify)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.Timeout)*time.Millisecond)
+	chromeCtx, chromeCancel, err := chrome.CreateChromeContext(ctx, cfg.SkipSSLVerify)
 	if err != nil {
 		cancel()
 		logger.Fatal("Failed to create Chrome context: %v", err)
@@ -73,8 +73,8 @@ func setupChromeContext(cmdConfig CommandConfig, url string, logger *helpers.Log
 	}, url
 }
 
-func getInitialResponse(cfg helpers.Config, url string, logger *helpers.Logger) (string, int) {
-	initialProtocol, initialStatusCode, err := helpers.GetInitialResponse(cfg, url)
+func getInitialResponse(cfg Config, url string, logger *core.Logger) (string, int) {
+	initialProtocol, initialStatusCode, err := chrome.GetInitialResponse(cfg.SkipSSLVerify, cfg.UserAgent, cfg.Headers, url)
 	if err != nil {
 		logger.Warn("Failed to get initial response: %v", err)
 		initialProtocol = "HTTP/1.1"
@@ -83,36 +83,10 @@ func getInitialResponse(cfg helpers.Config, url string, logger *helpers.Logger) 
 	return initialProtocol, initialStatusCode
 }
 
-type executionState struct {
-	logs               []chrome.LogEntry
-	network            []chrome.NetworkEntry
-	responseProtocol   string
-	responseStatusCode int
-	responseHeaders    map[string]string
-	responseCaptured   bool
-	requestHeaders     map[string]string
-	requestCaptured    bool
-	startTime          time.Time
-}
-
-func initializeState(initialProtocol string, initialStatusCode int) *executionState {
-	return &executionState{
-		logs:               make([]chrome.LogEntry, 0),
-		network:            make([]chrome.NetworkEntry, 0),
-		responseProtocol:   initialProtocol,
-		responseStatusCode: initialStatusCode,
-		responseHeaders:    make(map[string]string),
-		responseCaptured:   false,
-		requestHeaders:     make(map[string]string),
-		requestCaptured:    false,
-		startTime:          time.Now(),
-	}
-}
-
-func enableChromeDomains(chromeCtx context.Context, cmdConfig CommandConfig, logger *helpers.Logger) {
-	showNetworkOrVerbose := cmdConfig.ShowNetwork || cmdConfig.Verbose
-	if err := chrome.EnableChromeDomains(chromeCtx, cmdConfig.ShowLogs, showNetworkOrVerbose); err != nil {
-		if cmdConfig.ShowLogs {
+func enableChromeDomains(chromeCtx context.Context, cfg Config, logger *core.Logger) {
+	showNetworkOrVerbose := cfg.ShowNetwork || cfg.Verbose
+	if err := chrome.EnableChromeDomains(chromeCtx, cfg.ShowLogs, showNetworkOrVerbose); err != nil {
+		if cfg.ShowLogs {
 			logger.Fatal("Failed to enable log domains: %v", err)
 		} else {
 			logger.Error("Failed to enable network domain: %v", err)
@@ -120,132 +94,44 @@ func enableChromeDomains(chromeCtx context.Context, cmdConfig CommandConfig, log
 	}
 }
 
-type syncMaps struct {
-	requestMethods    sync.Map
-	requestHeadersMap sync.Map
-	requestURLs       sync.Map
-	requestStartTimes sync.Map
-	networkEntriesMap sync.Map
-}
-
-func initializeSyncMaps() *syncMaps { return &syncMaps{} }
-
-func createEventHandlers(cmdConfig CommandConfig, url string, state *executionState, syncMaps *syncMaps) *chrome.EventHandlers {
-	return &chrome.EventHandlers{
-		OnLog: func(le chrome.LogEntry) {
-			if cmdConfig.ShowLogs {
-				state.logs = append(state.logs, le)
-			}
-		},
-		OnNetwork: nil,
-		OnRequestWillBeSent: func(requestID string, method, reqURL string, headers map[string]string, startTime float64) {
-			syncMaps.requestHeadersMap.Store(requestID, headers)
-			captureVerboseHeaders(headers, reqURL, url, cmdConfig.Verbose, &state.requestCaptured, &state.requestHeaders)
-		},
-	}
-}
-
-func setupEventListeners(chromeCtx context.Context, cmdConfig CommandConfig, url string, cfg helpers.Config, state *executionState, syncMaps *syncMaps, handlers *chrome.EventHandlers) {
-	showNetworkOrVerbose := cmdConfig.ShowNetwork || cmdConfig.Verbose
-	showLogs := cmdConfig.ShowLogs
-	chromedp.ListenTarget(chromeCtx, func(ev interface{}) {
-		if showNetworkOrVerbose {
-			if evReq, ok := ev.(*cdpnetwork.EventRequestWillBeSent); ok {
-				chrome.ProcessNetworkEventRequestWillBeSent(evReq, &syncMaps.requestMethods, &syncMaps.requestURLs, &syncMaps.requestStartTimes, state.startTime, handlers)
-			}
-			if evExtra, ok := ev.(*cdpnetwork.EventRequestWillBeSentExtraInfo); ok {
-				if requestURL, ok := chrome.LoadStringFromSyncMap(&syncMaps.requestURLs, evExtra.RequestID.String()); ok && requestURL == url {
-					headers := chrome.ConvertEventHeaders(evExtra.Headers)
-					captureVerboseHeaders(headers, requestURL, url, cmdConfig.Verbose, &state.requestCaptured, &state.requestHeaders)
-				}
-			}
-		}
-		if showLogs {
-			chrome.ProcessLogEvent(ev, handlers)
-		}
-		if showNetworkOrVerbose {
-			processResponseEvents(ev, handlers, cmdConfig, cfg, state, syncMaps)
-		}
-	})
-}
-
-func processResponseEvents(ev interface{}, handlers *chrome.EventHandlers, cmdConfig CommandConfig, cfg helpers.Config, state *executionState, syncMaps *syncMaps) {
-	if evResp, ok := ev.(*cdpnetwork.EventResponseReceived); ok {
-		setupNetworkHandlerForResponse(evResp, handlers, cmdConfig.ShowNetwork, &state.network, &syncMaps.networkEntriesMap)
-		networkCfg := chrome.StreamNetworkConfig{
-			XHROnly:       cfg.XHROnly,
-			DocumentOnly:  cfg.DocumentOnly,
-			CssOnly:       cfg.CssOnly,
-			ScriptOnly:    cfg.ScriptOnly,
-			FontOnly:      cfg.FontOnly,
-			ImgOnly:       cfg.ImgOnly,
-			MediaOnly:     cfg.MediaOnly,
-			ManifestOnly:  cfg.ManifestOnly,
-			WebSocketOnly: cfg.WebSocketOnly,
-			MimeRegex:     cfg.MimeRegex,
-			StatusRegex:   cfg.StatusRegex,
-			DomainRegex:   cfg.DomainRegex,
-			MinSize:       cfg.MinSize,
-			MaxSize:       cfg.MaxSize,
-			ShowNetwork:   cfg.ShowNetwork,
-			ShowLogs:      cfg.ShowLogs,
-		}
-		ne := chrome.ProcessNetworkEventResponseReceived(evResp, networkCfg, &syncMaps.requestMethods, &syncMaps.requestStartTimes, state.startTime, &syncMaps.networkEntriesMap, handlers)
-		if ne != nil && cmdConfig.Verbose && !state.responseCaptured {
-			state.responseHeaders = ne.Headers
-			state.responseCaptured = true
-		}
-		handlers.OnNetwork = nil
-	}
-	if evFinished, ok := ev.(*cdpnetwork.EventLoadingFinished); ok {
-		chrome.ProcessNetworkEventLoadingFinished(evFinished, &syncMaps.networkEntriesMap, state.startTime, handlers)
-	}
-	if evFailed, ok := ev.(*cdpnetwork.EventLoadingFailed); ok {
-		ne := chrome.HandleLoadingFailedEvent(evFailed, &syncMaps.requestMethods, &syncMaps.requestURLs)
-		if ne != nil && cmdConfig.ShowNetwork {
-			state.network = append(state.network, *ne)
-		}
-	}
-}
-
-func configureHeadersAndCookies(chromeCtx context.Context, cmdConfig CommandConfig, url string, logger *helpers.Logger) {
-	if len(cmdConfig.Headers) > 0 || cmdConfig.UserAgent != "" {
-		if err := helpers.SetHeaders(chromeCtx, cmdConfig.UserAgent, cmdConfig.Headers); err != nil {
+func setupHeadersAndCookies(chromeCtx context.Context, cfg Config, url string, logger *core.Logger) {
+	if len(cfg.Headers) > 0 || cfg.UserAgent != "" {
+		if err := core.SetHeaders(chromeCtx, cfg.UserAgent, cfg.Headers); err != nil {
 			logger.Fatal("Failed to set headers: %v", err)
 		}
 	}
-	if len(cmdConfig.Cookies) > 0 {
-		if err := helpers.SetCookies(chromeCtx, url, cmdConfig.Cookies); err != nil {
+	if len(cfg.Cookies) > 0 {
+		if err := core.SetCookies(chromeCtx, url, cfg.Cookies); err != nil {
 			logger.Fatal("Failed to set cookies: %v", err)
 		}
 	}
 }
 
-func runFollowMode(cfg helpers.Config, cmdConfig CommandConfig, url string, logger *helpers.Logger, formatter *helpers.OutputFormatter) {
-	prepareOutputFile(cfg, url, logger)
+func runFollowMode(cfg Config, url string, logger *core.Logger, formatter *OutputFormatter) {
+	PrepareOutputFile(cfg, url, logger)
 	if cfg.OutputFile != "" {
-		outputWriter, err := helpers.NewOutputWriter(cfg.OutputFile, cfg.AppendMode)
+		outputWriter, err := io.NewOutputWriter(cfg.OutputFile, cfg.AppendMode)
 		if err != nil {
 			logger.Fatal("Failed to create output writer: %v", err)
 		}
 		cfg.OutputWriter = outputWriter
 		defer outputWriter.Close()
 	}
-	filterRegex, excludeRegex := compileRegexPatterns(cmdConfig.FilterPattern, cmdConfig.ExcludePattern)
+	filterRegex, excludeRegex := helpers.CompileRegexPatterns(cfg.FilterPattern, cfg.ExcludePattern)
 	headerWrittenLogs := false
 	headerWrittenNet := false
-	outputErrorTracker := newOutputErrorTracker()
+	outputErrorTracker := NewOutputErrorTracker()
 	onLog := func(le chrome.LogEntry) {
-		if !helpers.ShouldShowLine(le.Message, filterRegex, excludeRegex) {
+		if !helpers.FilterLog(le, filterRegex, excludeRegex) {
 			return
 		}
-		outputLogEntry(le, cfg, &headerWrittenLogs, outputErrorTracker, cmdConfig.JSONOutput, cmdConfig.YAMLOutput, cmdConfig.CSVOutput, formatter, logger)
+		OutputLogEntry(le, cfg, &headerWrittenLogs, outputErrorTracker, cfg.JSONOutput, cfg.YAMLOutput, cfg.CSVOutput, formatter, logger)
 	}
 	onNet := func(ne chrome.NetworkEntry) {
-		if !shouldIncludeNetworkEntry(ne, filterRegex, excludeRegex, cfg.MinSize, cfg.MaxSize) {
+		if !helpers.FilterNetworkEntry(ne, filterRegex, excludeRegex, cfg.MinSize, cfg.MaxSize) {
 			return
 		}
-		outputNetworkEntry(ne, cfg, &headerWrittenNet, outputErrorTracker, cmdConfig.JSONOutput, cmdConfig.YAMLOutput, cmdConfig.CSVOutput, formatter, logger)
+		OutputNetworkEntry(ne, cfg, &headerWrittenNet, outputErrorTracker, cfg.JSONOutput, cfg.YAMLOutput, cfg.CSVOutput, formatter, logger)
 	}
 	sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -258,36 +144,63 @@ func runFollowMode(cfg helpers.Config, cmdConfig CommandConfig, url string, logg
 		UserAgent:           cfg.UserAgent,
 		RotateFingerprints:  cfg.RotateFingerprints,
 		FingerprintInterval: cfg.FingerprintInterval,
+		XHROnly:             cfg.XHROnly,
+		DocumentOnly:        cfg.DocumentOnly,
+		CssOnly:             cfg.CssOnly,
+		ScriptOnly:          cfg.ScriptOnly,
+		FontOnly:            cfg.FontOnly,
+		ImgOnly:             cfg.ImgOnly,
+		MediaOnly:           cfg.MediaOnly,
+		ManifestOnly:        cfg.ManifestOnly,
+		WebSocketOnly:       cfg.WebSocketOnly,
+		MimeRegex:           cfg.MimeRegex,
+		StatusRegex:         cfg.StatusRegex,
+		DomainRegex:         cfg.DomainRegex,
+		MinSize:             cfg.MinSize,
+		MaxSize:             cfg.MaxSize,
 	}
-	if err := chrome.StreamLogsRealTime(streamCfg, sigCtx, url, onLog, onNet, helpers.SetHeaders, helpers.SetCookies, helpers.StartFingerprintRotation); err != nil {
+	if cfg.RotateFingerprints {
+		if cfg.FingerprintInterval <= 0 {
+			logger.Warn("Fingerprint rotation interval is invalid, disabling rotation")
+			streamCfg.RotateFingerprints = false
+		}
+	}
+	if err := chrome.StreamLogsRealTime(streamCfg, sigCtx, url, onLog, onNet, core.SetHeaders, core.SetCookies, core.StartFingerprintRotation); err != nil {
 		logger.Fatal("Error streaming logs: %v", err)
 	}
 }
 
-func runNormalMode(chromeCtx context.Context, cmdConfig CommandConfig, cfg helpers.Config, url string, state *executionState, logger *helpers.Logger, formatter *helpers.OutputFormatter) {
+func runNormalMode(chromeCtx context.Context, cfg Config, url string, state *executionState, logger *core.Logger, formatter *OutputFormatter) {
 	logger.Progress("Navigating to %s...", url)
 	tasks := []chromedp.Action{
 		chromedp.Navigate(url),
-		chromedp.Sleep(time.Duration(cmdConfig.Wait) * time.Millisecond),
+		chromedp.Sleep(time.Duration(cfg.Wait) * time.Millisecond),
 	}
 	if err := chromedp.Run(chromeCtx, tasks...); err != nil {
-		handleNavigationError(err, state.responseProtocol, url, state.startTime, cmdConfig.Verbose, logger)
+		handleNavigationError(err, state.responseProtocol, url, state.startTime, cfg.Verbose, logger)
 	}
 	if cfg.RotateFingerprints {
-		if err := helpers.StartFingerprintRotation(chromeCtx, cfg.FingerprintInterval); err != nil {
-			logger.Warn("Failed to start fingerprint rotation: %v", err)
+		if cfg.FingerprintInterval <= 0 {
+			logger.Warn("Fingerprint rotation interval is invalid, disabling rotation")
+		} else {
+			if err := core.StartFingerprintRotation(chromeCtx, cfg.FingerprintInterval); err != nil {
+				logger.Warn("Failed to start fingerprint rotation: %v", err)
+			}
 		}
 	}
 	logger.Success("Successfully loaded page: %s", url)
 	statusCode := state.responseStatusCode
 	duration := time.Since(state.startTime)
-	output := OutputData{
+	filterRegex, excludeRegex := helpers.CompileRegexPatterns(cfg.FilterPattern, cfg.ExcludePattern)
+	filteredLogs := helpers.FilterLogs(state.logs, filterRegex, excludeRegex)
+	filteredNetwork := helpers.FilterNetworkEntries(state.network, filterRegex, excludeRegex, cfg.MinSize, cfg.MaxSize)
+	outputData := OutputData{
 		URL:      url,
-		Logs:     state.logs,
-		Network:  state.network,
+		Logs:     filteredLogs,
+		Network:  filteredNetwork,
 		Duration: duration,
 	}
-	writeFinalOutput(cfg, output, state.network, url, state.startTime, state.responseProtocol, statusCode, duration, logger, formatter, cmdConfig.JSONOutput, cmdConfig.YAMLOutput, cmdConfig.Verbose, cmdConfig.ShowLogs, cmdConfig.ShowNetwork, state.requestCaptured, state.requestHeaders, state.responseHeaders)
+	WriteFinalOutput(cfg, outputData, filteredNetwork, url, state.startTime, state.responseProtocol, statusCode, duration, logger, formatter, cfg.JSONOutput, cfg.YAMLOutput, cfg.Verbose, cfg.ShowLogs, cfg.ShowNetwork, state.requestCaptured, state.requestHeaders, state.responseHeaders)
 }
 
 func FormatCobraError(err error) string {

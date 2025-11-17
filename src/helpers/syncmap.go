@@ -19,3 +19,13 @@ func LoadFloat64FromSyncMap(m *sync.Map, key string) (float64, bool) {
 	}
 	return 0, false
 }
+
+type SyncMaps struct {
+	RequestMethods    sync.Map
+	RequestHeadersMap sync.Map
+	RequestURLs       sync.Map
+	RequestStartTimes sync.Map
+	NetworkEntriesMap sync.Map
+}
+
+func NewSyncMaps() *SyncMaps { return &SyncMaps{} }

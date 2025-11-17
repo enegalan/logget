@@ -1,10 +1,12 @@
-package helpers
+package core
 
 import (
 	"fmt"
 	"os"
 	"strings"
 	"time"
+
+	"logget/src/colors"
 )
 
 type LogLevel int
@@ -37,14 +39,14 @@ func (l LogLevel) String() string {
 type Logger struct {
 	verbose bool
 	quiet   bool
-	theme   *ColorTheme
+	theme   *colors.ColorTheme
 }
 
-func NewLogger(verbose bool, colors bool) *Logger {
+func NewLogger(verbose bool, enableColors bool) *Logger {
 	return &Logger{
 		verbose: verbose,
 		quiet:   false,
-		theme:   GetTheme(colors),
+		theme:   colors.GetTheme(enableColors),
 	}
 }
 

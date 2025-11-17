@@ -7,11 +7,25 @@ import (
 	"strings"
 	"time"
 
-	helpers "logget/src"
 	chrome "logget/src/chrome"
+	"logget/src/core"
+	"logget/src/io"
 
 	"gopkg.in/yaml.v3"
 )
+
+func ValidateOutputFormats(cfg Config) {
+	formatCount := 0
+	for _, f := range []bool{cfg.JSONOutput, cfg.YAMLOutput, cfg.CSVOutput, cfg.HAROutput} {
+		if f {
+			formatCount++
+		}
+	}
+	if formatCount > 1 {
+		fmt.Println("logget: Only one output format can be specified at a time")
+		os.Exit(1)
+	}
+}
 
 type OutputData struct {
 	URL      string                `json:"url"`
@@ -26,11 +40,11 @@ type outputErrorTracker struct {
 	suppressed bool
 }
 
-func newOutputErrorTracker() *outputErrorTracker {
+func NewOutputErrorTracker() *outputErrorTracker {
 	return &outputErrorTracker{maxErrors: 5}
 }
 
-func (t *outputErrorTracker) handleError(err error, logger *helpers.Logger, message string) {
+func (t *outputErrorTracker) handleError(err error, logger *core.Logger, message string) {
 	if err == nil {
 		return
 	}
@@ -44,7 +58,7 @@ func (t *outputErrorTracker) handleError(err error, logger *helpers.Logger, mess
 	}
 }
 
-func getRequestHeadersList(cfg helpers.Config, url string, requestCaptured bool, requestHeaders map[string]string) []string {
+func getRequestHeadersList(cfg Config, url string, requestCaptured bool, requestHeaders map[string]string) []string {
 	if requestCaptured && len(requestHeaders) > 0 {
 		var result []string
 		for name, value := range requestHeaders {
@@ -52,25 +66,30 @@ func getRequestHeadersList(cfg helpers.Config, url string, requestCaptured bool,
 		}
 		return result
 	}
-	return helpers.GenerateHeaders(cfg, url)
+	return core.GenerateHeaders(cfg.UserAgent, cfg.Headers, url)
 }
 
-func writeOutputAndLog(cfg helpers.Config, content string, outputType string, logger *helpers.Logger) {
-	if err := helpers.WriteOutput(cfg, content); err != nil {
+func writeOutputAndLog(cfg Config, content string, outputType string, logger *core.Logger) {
+	if err := io.WriteOutput(io.WriteConfig{
+		OutputWriter: cfg.OutputWriter,
+		OutputFile:   cfg.OutputFile,
+		AppendMode:   cfg.AppendMode,
+		FollowMode:   cfg.FollowMode,
+	}, content); err != nil {
 		logger.Fatal("Failed to write %s: %v", outputType, err)
 	}
 	if cfg.OutputFile != "" {
-		helpers.LogOutputFileSuccess(cfg, outputType, logger)
+		io.LogOutputFileSuccess(cfg.OutputFile, cfg.AppendMode, outputType, logger)
 	}
 }
 
-func marshalAndWrite(cfg helpers.Config, data []byte, outputType string, logger *helpers.Logger) {
+func marshalAndWrite(cfg Config, data []byte, outputType string, logger *core.Logger) {
 	writeOutputAndLog(cfg, string(data)+"\n", outputType, logger)
 }
 
-func writeFinalOutput(cfg helpers.Config, output OutputData, network []chrome.NetworkEntry, url string, startTime time.Time, responseProtocol string, statusCode int, duration time.Duration, logger *helpers.Logger, formatter *helpers.OutputFormatter, jsonOutput bool, yamlOutput bool, verbose bool, showLogs bool, showNetwork bool, requestCaptured bool, requestHeaders map[string]string, responseHeaders map[string]string) {
+func WriteFinalOutput(cfg Config, output OutputData, network []chrome.NetworkEntry, url string, startTime time.Time, responseProtocol string, statusCode int, duration time.Duration, logger *core.Logger, formatter *OutputFormatter, jsonOutput bool, yamlOutput bool, verbose bool, showLogs bool, showNetwork bool, requestCaptured bool, requestHeaders map[string]string, responseHeaders map[string]string) {
 	if cfg.HAROutput {
-		harData, err := helpers.ConvertNetworkEntriesToHAR(network, url, startTime)
+		harData, err := core.ConvertNetworkEntriesToHAR(network, url, startTime)
 		if err != nil {
 			logger.Fatal("Failed to generate HAR: %v", err)
 		}
@@ -109,7 +128,7 @@ func writeFinalOutput(cfg helpers.Config, output OutputData, network []chrome.Ne
 	writeOutputAndLog(cfg, outputContent.String(), "Output", logger)
 }
 
-func prepareOutputFile(cfg helpers.Config, url string, logger *helpers.Logger) {
+func PrepareOutputFile(cfg Config, url string, logger *core.Logger) {
 	if cfg.OutputFile == "" {
 		logger.Progress("Streaming logs from %s (Press Ctrl+C to stop)", url)
 		return
@@ -134,20 +153,30 @@ func prepareOutputFile(cfg helpers.Config, url string, logger *helpers.Logger) {
 	logger.Progress("Streaming logs from %s (Press Ctrl+C to stop) -> %s", url, filePath)
 }
 
-func outputJSONEntry(entry interface{}, cfg helpers.Config) error {
+func outputJSONEntry(entry interface{}, cfg Config) error {
 	b, _ := json.Marshal(entry)
-	return helpers.WriteOutput(cfg, string(b)+"\n")
+	return io.WriteOutput(io.WriteConfig{
+		OutputWriter: cfg.OutputWriter,
+		OutputFile:   cfg.OutputFile,
+		AppendMode:   cfg.AppendMode,
+		FollowMode:   cfg.FollowMode,
+	}, string(b)+"\n")
 }
 
-func outputYAMLEntry(entry interface{}, cfg helpers.Config) error {
+func outputYAMLEntry(entry interface{}, cfg Config) error {
 	b, err := yaml.Marshal(entry)
 	if err != nil {
 		return err
 	}
-	return helpers.WriteOutput(cfg, string(b)+"\n")
+	return io.WriteOutput(io.WriteConfig{
+		OutputWriter: cfg.OutputWriter,
+		OutputFile:   cfg.OutputFile,
+		AppendMode:   cfg.AppendMode,
+		FollowMode:   cfg.FollowMode,
+	}, string(b)+"\n")
 }
 
-func outputCSVEntry(entry interface{}, cfg helpers.Config, headerWritten *bool, tracker *outputErrorTracker, csvFunc func(interface{}, helpers.Config, bool) error, errorMsg string, logger *helpers.Logger) {
+func outputCSVEntry(entry interface{}, cfg Config, headerWritten *bool, tracker *outputErrorTracker, csvFunc func(interface{}, Config, bool) error, errorMsg string, logger *core.Logger) {
 	err := csvFunc(entry, cfg, !*headerWritten)
 	tracker.handleError(err, logger, errorMsg)
 	if err == nil {
@@ -155,7 +184,7 @@ func outputCSVEntry(entry interface{}, cfg helpers.Config, headerWritten *bool, 
 	}
 }
 
-func outputEntry(entry interface{}, cfg helpers.Config, headerWritten *bool, tracker *outputErrorTracker, jsonOutput, yamlOutput, csvOutput bool, logger *helpers.Logger, csvFunc func(interface{}, helpers.Config, bool) error, csvErrorMsg string, formatFunc func(helpers.Config) error) {
+func outputEntry(entry interface{}, cfg Config, headerWritten *bool, tracker *outputErrorTracker, jsonOutput, yamlOutput, csvOutput bool, logger *core.Logger, csvFunc func(interface{}, Config, bool) error, csvErrorMsg string, formatFunc func(Config) error) {
 	if jsonOutput {
 		if err := outputJSONEntry(entry, cfg); err != nil {
 			tracker.handleError(err, logger, "Failed to write to output file: %v")
@@ -175,20 +204,20 @@ func outputEntry(entry interface{}, cfg helpers.Config, headerWritten *bool, tra
 	tracker.handleError(formatFunc(cfg), logger, "Failed to write entry: %v")
 }
 
-func outputLogEntry(le chrome.LogEntry, cfg helpers.Config, headerWritten *bool, tracker *outputErrorTracker, jsonOutput, yamlOutput, csvOutput bool, formatter *helpers.OutputFormatter, logger *helpers.Logger) {
+func OutputLogEntry(le chrome.LogEntry, cfg Config, headerWritten *bool, tracker *outputErrorTracker, jsonOutput, yamlOutput, csvOutput bool, formatter *OutputFormatter, logger *core.Logger) {
 	outputEntry(le, cfg, headerWritten, tracker, jsonOutput, yamlOutput, csvOutput, logger,
-		func(e interface{}, c helpers.Config, h bool) error {
+		func(e interface{}, c Config, h bool) error {
 			return formatter.FormatAndOutputLogCSVRow(e.(chrome.LogEntry), c, h)
 		},
 		"Failed to write CSV log row: %v",
-		func(c helpers.Config) error { return formatter.FormatAndOutputLog(le, c) })
+		func(c Config) error { return formatter.FormatAndOutputLog(le, c) })
 }
 
-func outputNetworkEntry(ne chrome.NetworkEntry, cfg helpers.Config, headerWritten *bool, tracker *outputErrorTracker, jsonOutput, yamlOutput, csvOutput bool, formatter *helpers.OutputFormatter, logger *helpers.Logger) {
+func OutputNetworkEntry(ne chrome.NetworkEntry, cfg Config, headerWritten *bool, tracker *outputErrorTracker, jsonOutput, yamlOutput, csvOutput bool, formatter *OutputFormatter, logger *core.Logger) {
 	outputEntry(ne, cfg, headerWritten, tracker, jsonOutput, yamlOutput, csvOutput, logger,
-		func(e interface{}, c helpers.Config, h bool) error {
+		func(e interface{}, c Config, h bool) error {
 			return formatter.FormatAndOutputNetworkCSVRow(e.(chrome.NetworkEntry), c, h)
 		},
 		"Failed to write CSV network row: %v",
-		func(c helpers.Config) error { return formatter.FormatAndOutputNetwork(ne, c) })
+		func(c Config) error { return formatter.FormatAndOutputNetwork(ne, c) })
 }

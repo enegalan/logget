@@ -2,7 +2,11 @@ package chrome
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
+	"net/http"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -30,6 +34,20 @@ type StreamConfig struct {
 	UserAgent           string
 	RotateFingerprints  bool
 	FingerprintInterval int
+	XHROnly             bool
+	DocumentOnly        bool
+	CssOnly             bool
+	ScriptOnly          bool
+	FontOnly            bool
+	ImgOnly             bool
+	MediaOnly           bool
+	ManifestOnly        bool
+	WebSocketOnly       bool
+	MimeRegex           *regexp.Regexp
+	StatusRegex         *regexp.Regexp
+	DomainRegex         *regexp.Regexp
+	MinSize             int64
+	MaxSize             int64
 }
 
 func StreamLogsRealTime(cfg StreamConfig, ctx context.Context, url string, onLog func(LogEntry), onNet func(NetworkEntry), setHeaders func(context.Context, string, []string) error, setCookies func(context.Context, string, []string) error, startFingerprintRotation func(context.Context, int) error) error {
@@ -61,8 +79,22 @@ func StreamLogsRealTime(cfg StreamConfig, ctx context.Context, url string, onLog
 		if showNetwork {
 			if evResp, ok := ev.(*cdpnetwork.EventResponseReceived); ok {
 				streamCfg := StreamNetworkConfig{
-					ShowNetwork: cfg.ShowNetwork,
-					ShowLogs:    cfg.ShowLogs,
+					XHROnly:       cfg.XHROnly,
+					DocumentOnly:  cfg.DocumentOnly,
+					CssOnly:       cfg.CssOnly,
+					ScriptOnly:    cfg.ScriptOnly,
+					FontOnly:      cfg.FontOnly,
+					ImgOnly:       cfg.ImgOnly,
+					MediaOnly:     cfg.MediaOnly,
+					ManifestOnly:  cfg.ManifestOnly,
+					WebSocketOnly: cfg.WebSocketOnly,
+					MimeRegex:     cfg.MimeRegex,
+					StatusRegex:   cfg.StatusRegex,
+					DomainRegex:   cfg.DomainRegex,
+					MinSize:       cfg.MinSize,
+					MaxSize:       cfg.MaxSize,
+					ShowNetwork:   cfg.ShowNetwork,
+					ShowLogs:      cfg.ShowLogs,
 				}
 				ProcessNetworkEventResponseReceived(evResp, streamCfg, &maps.Methods, &maps.StartTimes, pageStartTime, &maps.NetworkEntries, handlers)
 			}
@@ -94,4 +126,36 @@ func StreamLogsRealTime(cfg StreamConfig, ctx context.Context, url string, onLog
 	}
 	<-chromeCtx.Done()
 	return nil
+}
+
+func GetInitialResponse(skipSSLVerify bool, userAgent string, headers []string, targetURL string) (string, int, error) {
+	transport := &http.Transport{}
+	if skipSSLVerify {
+		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	}
+	client := &http.Client{
+		Transport: transport,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+		Timeout: 5 * time.Second,
+	}
+	req, err := http.NewRequest("GET", targetURL, nil)
+	if err != nil {
+		return "", 0, err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	for _, header := range headers {
+		if colonIndex := strings.Index(header, ":"); colonIndex != -1 {
+			key := strings.TrimSpace(header[:colonIndex])
+			value := strings.TrimSpace(header[colonIndex+1:])
+			req.Header.Set(key, value)
+		}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", 0, err
+	}
+	defer resp.Body.Close()
+	return resp.Proto, resp.StatusCode, nil
 }
