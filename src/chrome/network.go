@@ -1,6 +1,7 @@
 package chrome
 
 import (
+	"fmt"
 	neturl "net/url"
 	"regexp"
 	"strconv"
@@ -8,8 +9,16 @@ import (
 	"sync"
 	"time"
 
-	cdpnetwork "github.com/chromedp/cdproto/network"
+	"github.com/go-rod/rod/lib/proto"
 )
+
+func convertProtoHeaders(headers proto.NetworkHeaders) map[string]string {
+	result := make(map[string]string, len(headers))
+	for k, v := range headers {
+		result[k] = fmt.Sprintf("%v", v)
+	}
+	return result
+}
 
 type NetworkEntry struct {
 	URL                          string            `json:"url"`
@@ -96,22 +105,22 @@ func FormatTiming(ms float64) string {
 	return strconv.FormatFloat(ms, 'f', 2, 64) + "ms"
 }
 
-func ShouldIncludeNetworkEvent(cfg StreamNetworkConfig, ev *cdpnetwork.EventResponseReceived) bool {
+func ShouldIncludeNetworkEvent(cfg StreamNetworkConfig, ev *proto.NetworkResponseReceived) bool {
 	typeChecks := []struct {
 		enabled bool
 		check   func() bool
 	}{
 		{cfg.XHROnly, func() bool {
-			return ev.Type == cdpnetwork.ResourceTypeXHR || ev.Type == cdpnetwork.ResourceTypeFetch
+			return ev.Type == proto.NetworkResourceTypeXHR || ev.Type == proto.NetworkResourceTypeFetch
 		}},
-		{cfg.DocumentOnly, func() bool { return ev.Type == cdpnetwork.ResourceTypeDocument }},
-		{cfg.CssOnly, func() bool { return ev.Type == cdpnetwork.ResourceTypeStylesheet }},
-		{cfg.ScriptOnly, func() bool { return ev.Type == cdpnetwork.ResourceTypeScript }},
-		{cfg.FontOnly, func() bool { return ev.Type == cdpnetwork.ResourceTypeFont }},
-		{cfg.ImgOnly, func() bool { return ev.Type == cdpnetwork.ResourceTypeImage }},
-		{cfg.MediaOnly, func() bool { return ev.Type == cdpnetwork.ResourceTypeMedia }},
-		{cfg.ManifestOnly, func() bool { return ev.Type == cdpnetwork.ResourceTypeManifest }},
-		{cfg.WebSocketOnly, func() bool { return ev.Type == cdpnetwork.ResourceTypeWebSocket }},
+		{cfg.DocumentOnly, func() bool { return ev.Type == proto.NetworkResourceTypeDocument }},
+		{cfg.CssOnly, func() bool { return ev.Type == proto.NetworkResourceTypeStylesheet }},
+		{cfg.ScriptOnly, func() bool { return ev.Type == proto.NetworkResourceTypeScript }},
+		{cfg.FontOnly, func() bool { return ev.Type == proto.NetworkResourceTypeFont }},
+		{cfg.ImgOnly, func() bool { return ev.Type == proto.NetworkResourceTypeImage }},
+		{cfg.MediaOnly, func() bool { return ev.Type == proto.NetworkResourceTypeMedia }},
+		{cfg.ManifestOnly, func() bool { return ev.Type == proto.NetworkResourceTypeManifest }},
+		{cfg.WebSocketOnly, func() bool { return ev.Type == proto.NetworkResourceTypeWebSocket }},
 	}
 	for _, tc := range typeChecks {
 		if tc.enabled && !tc.check() {
@@ -129,10 +138,11 @@ func ShouldIncludeNetworkEvent(cfg StreamNetworkConfig, ev *cdpnetwork.EventResp
 			if ev.Response == nil {
 				return false
 			}
-			mimeCandidate := strings.ToLower(string(ev.Response.MimeType))
+			mimeCandidate := strings.ToLower(ev.Response.MIMEType)
 			if ctRaw, ok := ev.Response.Headers["Content-Type"]; ok {
-				if s, ok := ctRaw.(string); ok && s != "" {
-					mimeCandidate = strings.ToLower(s)
+				ctStr := fmt.Sprintf("%v", ctRaw)
+				if ctStr != "" {
+					mimeCandidate = strings.ToLower(ctStr)
 				}
 			}
 			return cfg.MimeRegex.MatchString(mimeCandidate)
@@ -227,9 +237,9 @@ func CategorizeError(errorText string) string {
 	return "unknown"
 }
 
-func BuildNetworkEntryFromEvent(ev *cdpnetwork.EventResponseReceived, requestMethod string, requestTiming *cdpnetwork.ResourceTiming, responseTime float64, requestTime float64) NetworkEntry {
+func BuildNetworkEntryFromEvent(ev *proto.NetworkResponseReceived, requestMethod string, requestTiming *proto.NetworkResourceTiming, responseTime float64, requestTime float64) NetworkEntry {
 	response := ev.Response
-	headers := ConvertEventHeaders(response.Headers)
+	headers := convertProtoHeaders(response.Headers)
 	method := getDefaultMethod(requestMethod)
 	var duration, ttfb, connectTime, dnsTime, sslTime, receiveTime, sendTime, waitTime float64
 	var requestStartTime, responseStartTime float64
@@ -264,7 +274,7 @@ func BuildNetworkEntryFromEvent(ev *cdpnetwork.EventResponseReceived, requestMet
 	var queuedTime float64
 	if requestTiming != nil {
 		if requestTiming.RequestTime >= 0 {
-			if ev.Type == cdpnetwork.ResourceTypeDocument && navigationStartTime < 0 {
+			if ev.Type == proto.NetworkResourceTypeDocument && navigationStartTime < 0 {
 				navigationStartTime = requestTiming.RequestTime
 				queuedTime = 0
 			} else if navigationStartTime >= 0 {
@@ -288,9 +298,9 @@ func BuildNetworkEntryFromEvent(ev *cdpnetwork.EventResponseReceived, requestMet
 		Status:            int(response.Status),
 		Headers:           headers,
 		Timestamp:         time.Now(),
-		Type:              string(response.MimeType),
+		Type:              response.MIMEType,
 		Size:              int64(response.EncodedDataLength),
-		ResourceType:      ev.Type.String(),
+		ResourceType:      string(ev.Type),
 		Duration:          duration,
 		TimeToFirstByte:   ttfb,
 		ConnectTime:       connectTime,
@@ -307,7 +317,7 @@ func BuildNetworkEntryFromEvent(ev *cdpnetwork.EventResponseReceived, requestMet
 	return ne
 }
 
-func BuildNetworkEntryFromErrorEvent(ev *cdpnetwork.EventLoadingFailed, requestMethod string, requestURL string) NetworkEntry {
+func BuildNetworkEntryFromErrorEvent(ev *proto.NetworkLoadingFailed, requestMethod string, requestURL string) NetworkEntry {
 	return NetworkEntry{
 		URL:          requestURL,
 		Method:       getDefaultMethod(requestMethod),
@@ -316,7 +326,7 @@ func BuildNetworkEntryFromErrorEvent(ev *cdpnetwork.EventLoadingFailed, requestM
 		Timestamp:    time.Now(),
 		Type:         "",
 		Size:         0,
-		ResourceType: ev.Type.String(),
+		ResourceType: string(ev.Type),
 		Error:        ev.ErrorText,
 		ErrorType:    CategorizeError(ev.ErrorText),
 	}
@@ -340,8 +350,8 @@ func LoadFloat64FromSyncMap(m *sync.Map, key string) (float64, bool) {
 	return 0, false
 }
 
-func HandleLoadingFailedEvent(ev *cdpnetwork.EventLoadingFailed, requestMethods *sync.Map, requestURLs *sync.Map) *NetworkEntry {
-	requestID := ev.RequestID.String()
+func HandleLoadingFailedEvent(ev *proto.NetworkLoadingFailed, requestMethods *sync.Map, requestURLs *sync.Map) *NetworkEntry {
+	requestID := string(ev.RequestID)
 	method, _ := LoadStringFromSyncMap(requestMethods, requestID)
 	requestURL, ok := LoadStringFromSyncMap(requestURLs, requestID)
 	if !ok || requestURL == "" {
@@ -351,14 +361,14 @@ func HandleLoadingFailedEvent(ev *cdpnetwork.EventLoadingFailed, requestMethods 
 	return &ne
 }
 
-func ProcessNetworkEventRequestWillBeSent(ev *cdpnetwork.EventRequestWillBeSent, requestMethods *sync.Map, requestURLs *sync.Map, requestStartTimes *sync.Map, startTime time.Time, handlers *EventHandlers) {
+func ProcessNetworkEventRequestWillBeSent(ev *proto.NetworkRequestWillBeSent, requestMethods *sync.Map, requestURLs *sync.Map, requestStartTimes *sync.Map, startTime time.Time, handlers *EventHandlers) {
 	if ev.Request == nil {
 		return
 	}
-	requestID := ev.RequestID.String()
+	requestID := string(ev.RequestID)
 	requestMethods.Store(requestID, ev.Request.Method)
 	requestURLs.Store(requestID, ev.Request.URL)
-	headers := ConvertEventHeaders(ev.Request.Headers)
+	headers := convertProtoHeaders(ev.Request.Headers)
 	requestStartTime := float64(time.Since(startTime).Nanoseconds()) / 1e6
 	requestStartTimes.Store(requestID, requestStartTime)
 	if handlers != nil && handlers.OnRequestWillBeSent != nil {
@@ -366,13 +376,13 @@ func ProcessNetworkEventRequestWillBeSent(ev *cdpnetwork.EventRequestWillBeSent,
 	}
 }
 
-func ProcessNetworkEventResponseReceived(ev *cdpnetwork.EventResponseReceived, cfg StreamNetworkConfig, requestMethods *sync.Map, requestStartTimes *sync.Map, startTime time.Time, networkEntriesMap *sync.Map, handlers *EventHandlers) *NetworkEntry {
+func ProcessNetworkEventResponseReceived(ev *proto.NetworkResponseReceived, cfg StreamNetworkConfig, requestMethods *sync.Map, requestStartTimes *sync.Map, startTime time.Time, networkEntriesMap *sync.Map, handlers *EventHandlers) *NetworkEntry {
 	if !ShouldIncludeNetworkEvent(cfg, ev) {
 		return nil
 	}
-	requestID := ev.RequestID.String()
+	requestID := string(ev.RequestID)
 	method, _ := LoadStringFromSyncMap(requestMethods, requestID)
-	var requestTiming *cdpnetwork.ResourceTiming
+	var requestTiming *proto.NetworkResourceTiming
 	var requestStartTime, responseTime float64
 	if ev.Response != nil && ev.Response.Timing != nil {
 		requestTiming = ev.Response.Timing
@@ -400,8 +410,8 @@ func updateEntryContentDownloadTime(entry *NetworkEntry, contentDownloadTime flo
 	entry.Total += entry.ContentDownloadTime
 }
 
-func ProcessNetworkEventLoadingFinished(ev *cdpnetwork.EventLoadingFinished, networkEntriesMap *sync.Map, startTime time.Time, handlers *EventHandlers) {
-	requestID := ev.RequestID.String()
+func ProcessNetworkEventLoadingFinished(ev *proto.NetworkLoadingFinished, networkEntriesMap *sync.Map, startTime time.Time, handlers *EventHandlers) {
+	requestID := string(ev.RequestID)
 	entryVal, ok := networkEntriesMap.Load(requestID)
 	if !ok {
 		return
@@ -433,7 +443,7 @@ func ProcessNetworkEventLoadingFinished(ev *cdpnetwork.EventLoadingFinished, net
 	}
 }
 
-func ProcessNetworkEventLoadingFailed(ev *cdpnetwork.EventLoadingFailed, requestMethods *sync.Map, requestURLs *sync.Map, handlers *EventHandlers) {
+func ProcessNetworkEventLoadingFailed(ev *proto.NetworkLoadingFailed, requestMethods *sync.Map, requestURLs *sync.Map, handlers *EventHandlers) {
 	if ne := HandleLoadingFailedEvent(ev, requestMethods, requestURLs); ne != nil && handlers != nil && handlers.OnNetwork != nil {
 		handlers.OnNetwork(*ne)
 	}

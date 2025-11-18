@@ -8,8 +8,7 @@ import (
 	"sync"
 	"time"
 
-	cdplog "github.com/chromedp/cdproto/log"
-	"github.com/chromedp/cdproto/runtime"
+	"github.com/go-rod/rod/lib/proto"
 )
 
 type LogEntry struct {
@@ -50,7 +49,7 @@ func isChromeInternalMessage(message string) bool {
 	return !exists
 }
 
-func formatFrame(frame *runtime.CallFrame) string {
+func formatFrame(frame *proto.RuntimeCallFrame) string {
 	if frame.URL == "" && frame.FunctionName == "" {
 		return ""
 	}
@@ -63,7 +62,7 @@ func formatFrame(frame *runtime.CallFrame) string {
 	return fmt.Sprintf("\n    at %s:%d:%d", frame.URL, frame.LineNumber+1, frame.ColumnNumber+1)
 }
 
-func storeExceptionLocation(ed *runtime.ExceptionDetails) {
+func storeExceptionLocation(ed *proto.RuntimeExceptionDetails) {
 	if ed == nil {
 		return
 	}
@@ -96,7 +95,7 @@ func ProcessLogEvent(ev interface{}, handlers *EventHandlers) {
 	if handlers == nil || handlers.OnLog == nil {
 		return
 	}
-	if ev, ok := ev.(*runtime.EventExceptionThrown); ok {
+	if ev, ok := ev.(*proto.RuntimeExceptionThrown); ok {
 		var message string
 		if ev.ExceptionDetails != nil {
 			if ev.ExceptionDetails.Exception != nil {
@@ -133,32 +132,31 @@ func ProcessLogEvent(ev interface{}, handlers *EventHandlers) {
 		handlers.OnLog(createLogEntry("error", message, "browser"))
 		return
 	}
-	if ev, ok := ev.(*cdplog.EventEntryAdded); ok {
+	if ev, ok := ev.(*proto.LogEntryAdded); ok {
 		if isChromeInternalMessage(ev.Entry.Text) {
 			return
 		}
-		level := normalizeLogLevel(ev.Entry.Level.String(), ev.Entry.Text)
+		level := normalizeLogLevel(string(ev.Entry.Level), ev.Entry.Text)
 		handlers.OnLog(createLogEntry(level, ev.Entry.Text, "browser"))
 		return
 	}
-	if ev, ok := ev.(*runtime.EventConsoleAPICalled); ok {
+	if ev, ok := ev.(*proto.RuntimeConsoleAPICalled); ok {
 		var message string
 		for _, arg := range ev.Args {
-			if arg.Value == nil {
-				continue
-			}
 			var str string
-			if err := json.Unmarshal(arg.Value, &str); err == nil {
+			argVal := arg.Value
+			argBytes, _ := argVal.MarshalJSON()
+			if err := json.Unmarshal(argBytes, &str); err == nil {
 				message += str + " "
 			} else {
-				message += fmt.Sprintf("%v ", arg.Value)
+				message += fmt.Sprintf("%v ", argVal)
 			}
 		}
 		message = strings.TrimSpace(message)
 		if message != "" {
 			consoleAPIMessages.Store(message, true)
 		}
-		level := normalizeLogLevel(ev.Type.String(), message)
+		level := normalizeLogLevel(string(ev.Type), message)
 		handlers.OnLog(createLogEntry(level, message, "console"))
 	}
 }

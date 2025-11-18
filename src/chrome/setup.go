@@ -3,52 +3,81 @@ package chrome
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
+	"strings"
+	"sync"
 
-	cdplog "github.com/chromedp/cdproto/log"
-	cdpnetwork "github.com/chromedp/cdproto/network"
-	"github.com/chromedp/cdproto/runtime"
-	"github.com/chromedp/chromedp"
+	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/launcher"
+	"github.com/go-rod/rod/lib/proto"
 )
 
-func GetChromeOptions(skipSSLVerify bool) []chromedp.ExecAllocatorOption {
-	opts := append(chromedp.DefaultExecAllocatorOptions[:],
-		chromedp.Flag("headless", true),
-		chromedp.Flag("disable-gpu", true),
-		chromedp.Flag("disable-dev-shm-usage", true),
-		chromedp.Flag("no-sandbox", true),
-		chromedp.Flag("disable-extensions", true),
-		chromedp.Flag("disable-plugins", true),
-		chromedp.Flag("disable-web-security", true),
-		chromedp.Flag("disable-features", "VizDisplayCompositor"),
-		chromedp.Flag("ignore-certificate-errors", true),
-		chromedp.Flag("ignore-ssl-errors", true),
-		chromedp.Flag("allow-running-insecure-content", true),
-		chromedp.Flag("disable-certificate-verification", true),
-		chromedp.Flag("disable-background-networking", true),
-		chromedp.Flag("disable-background-timer-throttling", true),
-		chromedp.Flag("disable-breakpad", true),
-		chromedp.Flag("disable-client-side-phishing-detection", true),
-		chromedp.Flag("disable-default-apps", true),
-		chromedp.Flag("disable-hang-monitor", true),
-		chromedp.Flag("disable-popup-blocking", true),
-		chromedp.Flag("disable-prompt-on-repost", true),
-		chromedp.Flag("disable-sync", true),
-		chromedp.Flag("disable-translate", true),
-		chromedp.Flag("metrics-recording-only", true),
-		chromedp.Flag("no-first-run", true),
-		chromedp.Flag("safebrowsing-disable-auto-update", true),
-		chromedp.Flag("enable-automation", false),
-		chromedp.Flag("password-store", "basic"),
-		chromedp.Flag("use-mock-keychain", true),
-	)
+type downloadDetector struct {
+	mu             sync.Mutex
+	messageShown   bool
+	originalWriter io.Writer
+	quiet          bool
+}
+
+func (d *downloadDetector) Write(p []byte) (n int, err error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	content := string(p)
+	if strings.Contains(content, "DevTools listening") {
+		return len(p), nil
+	}
+	if !d.messageShown && (strings.Contains(content, "download") ||
+		strings.Contains(content, "Downloading") ||
+		strings.Contains(content, "Installing") ||
+		strings.Contains(content, "fetch")) {
+		d.messageShown = true
+		if !d.quiet {
+			fmt.Fprintf(os.Stderr, "Installing Chromium automatically (this may take a while)...\n")
+		}
+	}
+	return len(p), nil
+}
+
+func GetChromeOptions(skipSSLVerify bool) []string {
+	args := []string{
+		"--headless",
+		"--disable-gpu",
+		"--disable-dev-shm-usage",
+		"--no-sandbox",
+		"--disable-extensions",
+		"--disable-plugins",
+		"--disable-web-security",
+		"--disable-features=VizDisplayCompositor",
+		"--ignore-certificate-errors",
+		"--ignore-ssl-errors",
+		"--allow-running-insecure-content",
+		"--disable-certificate-verification",
+		"--disable-background-networking",
+		"--disable-background-timer-throttling",
+		"--disable-breakpad",
+		"--disable-client-side-phishing-detection",
+		"--disable-default-apps",
+		"--disable-hang-monitor",
+		"--disable-popup-blocking",
+		"--disable-prompt-on-repost",
+		"--disable-sync",
+		"--disable-translate",
+		"--metrics-recording-only",
+		"--no-first-run",
+		"--safebrowsing-disable-auto-update",
+		"--enable-automation=false",
+		"--password-store=basic",
+		"--use-mock-keychain",
+	}
 	if skipSSLVerify {
-		opts = append(opts,
-			chromedp.Flag("ignore-certificate-errors-spki-list", true),
-			chromedp.Flag("ignore-ssl-errors", true),
-			chromedp.Flag("ignore-certificate-errors", true),
+		args = append(args,
+			"--ignore-certificate-errors-spki-list",
+			"--ignore-ssl-errors",
+			"--ignore-certificate-errors",
 		)
 	}
-	return opts
+	return args
 }
 
 func ConvertEventHeaders(headersMap map[string]interface{}) map[string]string {
@@ -63,25 +92,89 @@ func ConvertEventHeaders(headersMap map[string]interface{}) map[string]string {
 	return headers
 }
 
-func CreateChromeContext(ctx context.Context, skipSSLVerify bool) (context.Context, context.CancelFunc, error) {
-	allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, GetChromeOptions(skipSSLVerify)...)
-	chromeCtx, chromeCancel := chromedp.NewContext(allocCtx)
-	return chromeCtx, func() { chromeCancel(); allocCancel() }, nil
+type ChromeContext struct {
+	Browser *rod.Browser
+	Page    *rod.Page
+	Cancel  context.CancelFunc
+	Ctx     context.Context
 }
 
-func EnableChromeDomains(ctx context.Context, showLogs, showNetwork bool) error {
-	if showLogs {
-		if err := chromedp.Run(ctx, cdplog.Enable()); err != nil {
-			return fmt.Errorf("failed to enable log domain: %v", err)
+func CreateChromeContext(ctx context.Context, skipSSLVerify bool, quiet bool) (*ChromeContext, context.CancelFunc, error) {
+	launcher := launcher.New().
+		Headless(true).
+		NoSandbox(true).
+		Set("disable-gpu").
+		Set("disable-dev-shm-usage").
+		Set("disable-extensions").
+		Set("disable-plugins").
+		Set("disable-web-security").
+		Set("disable-features", "VizDisplayCompositor").
+		Set("ignore-certificate-errors").
+		Set("ignore-ssl-errors").
+		Set("allow-running-insecure-content").
+		Set("disable-certificate-verification").
+		Set("disable-background-networking").
+		Set("disable-background-timer-throttling").
+		Set("disable-breakpad").
+		Set("disable-client-side-phishing-detection").
+		Set("disable-default-apps").
+		Set("disable-hang-monitor").
+		Set("disable-popup-blocking").
+		Set("disable-prompt-on-repost").
+		Set("disable-sync").
+		Set("disable-translate").
+		Set("metrics-recording-only").
+		Set("no-first-run").
+		Set("safebrowsing-disable-auto-update").
+		Set("enable-automation", "false").
+		Set("password-store", "basic").
+		Set("use-mock-keychain")
+	if quiet {
+		launcher = launcher.Logger(io.Discard)
+	} else {
+		detector := &downloadDetector{
+			originalWriter: os.Stderr,
+			quiet:          quiet,
 		}
-		if err := chromedp.Run(ctx, runtime.Enable()); err != nil {
-			return fmt.Errorf("failed to enable runtime domain: %v", err)
-		}
+		launcher = launcher.Logger(detector)
 	}
-	if showNetwork {
-		if err := chromedp.Run(ctx, cdpnetwork.Enable()); err != nil {
-			return fmt.Errorf("failed to enable network domain: %v", err)
-		}
+	if skipSSLVerify {
+		launcher = launcher.
+			Set("ignore-certificate-errors-spki-list").
+			Set("ignore-ssl-errors").
+			Set("ignore-certificate-errors")
 	}
-	return nil
+	url, err := launcher.Launch()
+	if err != nil {
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "cannot open shared object file") ||
+			strings.Contains(errMsg, "No such file or directory") {
+			return nil, nil, fmt.Errorf("failed to launch browser: %v\n\n"+
+				"Chromium requires system libraries to run. This is a limitation of Chromium itself.\n"+
+				"If you see this error, you may need to install missing libraries.\n"+
+				"For more information, see: https://go-rod.github.io/#/compatibility?id=os", err)
+		}
+		return nil, nil, fmt.Errorf("failed to launch browser: %v", err)
+	}
+	browser := rod.New().ControlURL(url).Context(ctx)
+	if err := browser.Connect(); err != nil {
+		return nil, nil, fmt.Errorf("failed to connect to browser: %v", err)
+	}
+	page, err := browser.Page(proto.TargetCreateTarget{})
+	if err != nil {
+		browser.Close()
+		return nil, nil, fmt.Errorf("failed to create page: %v", err)
+	}
+	page.MustEval("() => {}")
+	cancel := func() {
+		page.Close()
+		browser.Close()
+		launcher.Cleanup()
+	}
+	return &ChromeContext{
+		Browser: browser,
+		Page:    page,
+		Cancel:  cancel,
+		Ctx:     ctx,
+	}, cancel, nil
 }

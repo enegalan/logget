@@ -1,6 +1,13 @@
-#!/bin/bash
+#!/bin/sh
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+case "$0" in
+	/*)
+		SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+		;;
+	*)
+		SCRIPT_DIR="$(cd "$(dirname "$(pwd)/$0")" && pwd)"
+		;;
+esac
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 COLORS_DEF="$PROJECT_ROOT/src/colors/colors.def"
 
@@ -43,14 +50,23 @@ convert_name() {
 }
 
 while IFS='=' read -r key value || [ -n "$key" ]; do
-	[[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
-	key="${key#"${key%%[![:space:]]*}"}"
-	key="${key%"${key##*[![:space:]]}"}"
-	value="${value#"${value%%[![:space:]]*}"}"
-	value="${value%"${value##*[![:space:]]}"}"
-	[[ -z "$key" || -z "$value" ]] && continue
-	esc_char=$'\033'
-	value="${value//\\033/$esc_char}"
-	bash_name=$(convert_name "$key")
-	export "$bash_name=$value"
+	case "$key" in
+		"")
+			continue
+			;;
+		\#*)
+			continue
+			;;
+		*)
+			key=$(echo "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+			value=$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+			if [ -z "$key" ] || [ -z "$value" ]; then
+				continue
+			fi
+			esc_char=$(printf '\033')
+			value=$(echo "$value" | sed "s/\\\\033/$esc_char/g")
+			bash_name=$(convert_name "$key")
+			export "$bash_name=$value"
+			;;
+	esac
 done < "$COLORS_DEF"

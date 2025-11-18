@@ -12,11 +12,11 @@
 
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 COLORS_SH="$SCRIPT_DIR/colors.sh"
 if [ -f "$COLORS_SH" ]; then
-    source "$COLORS_SH"
+    . "$COLORS_SH"
 fi
 
 BINARY_NAME="logget"
@@ -128,15 +128,15 @@ echo -e "${BLUE}Detected OS: ${GREEN}$OS${NC}"
 echo -e "${BLUE}Detected architecture: ${GREEN}$ARCH${NC}"
 
 check_dependencies() {
-    local missing_tools=()
+    local missing_tools=""
     if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
-        missing_tools+=("curl or wget")
+        missing_tools="${missing_tools}curl or wget "
     fi
     if ! command -v tar >/dev/null 2>&1; then
-        missing_tools+=("tar")
+        missing_tools="${missing_tools}tar "
     fi
-    if [ ${#missing_tools[@]} -ne 0 ]; then
-        error_exit "Missing required tools: ${missing_tools[*]}"
+    if [ -n "$missing_tools" ]; then
+        error_exit "Missing required tools: $missing_tools"
     fi
     if command -v curl >/dev/null 2>&1; then
         DOWNLOAD_CMD="curl"
@@ -259,12 +259,16 @@ chmod +x "$BINARY_PATH"
 # Check if logget is already installed
 if [ -f "$INSTALL_DIR/$BINARY_NAME" ]; then
     echo -e "${YELLOW}logget is already installed at $INSTALL_DIR/$BINARY_NAME${NC}"
-    read -p "Do you want to overwrite it? (y/N): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo -e "${YELLOW}Installation cancelled${NC}"
-        exit 0
-    fi
+    printf "Do you want to overwrite it? (y/N): "
+    read REPLY
+    case "$REPLY" in
+        [Yy]|"yes"|"Yes"|"YES")
+            ;;
+        *)
+            echo -e "${YELLOW}Installation cancelled${NC}"
+            exit 0
+            ;;
+    esac
 fi
 
 # Install binary
@@ -291,11 +295,19 @@ if [ -f "$INSTALL_DIR/$BINARY_NAME" ] && [ -x "$INSTALL_DIR/$BINARY_NAME" ]; the
     echo -e "${GREEN}Installation complete!${NC}"
     echo -e "${BLUE}Installed version: ${GREEN}$INSTALLED_VERSION${NC}"
     echo -e "${BLUE}Binary location: ${GREEN}$INSTALL_DIR/$BINARY_NAME${NC}"
-    if [[ "$INSTALL_DIR" == "$HOME"* ]] && [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
-        echo -e "${YELLOW}Note: $INSTALL_DIR is not in your PATH.${NC}"
-        echo -e "${YELLOW}Add this line to your shell profile (~/.bashrc, ~/.zshrc, etc.):${NC}"
-        echo -e "${BLUE}export PATH=\"\$PATH:$INSTALL_DIR\"${NC}"
-    fi
+    case "$INSTALL_DIR" in
+        "$HOME"*)
+            case ":$PATH:" in
+                *":$INSTALL_DIR:"*)
+                    ;;
+                *)
+                    echo -e "${YELLOW}Note: $INSTALL_DIR is not in your PATH.${NC}"
+                    echo -e "${YELLOW}Add this line to your shell profile (~/.bashrc, ~/.zshrc, etc.):${NC}"
+                    echo -e "${BLUE}export PATH=\"\$PATH:$INSTALL_DIR\"${NC}"
+                    ;;
+            esac
+            ;;
+    esac
 else
     error_exit "Installation verification failed"
 fi

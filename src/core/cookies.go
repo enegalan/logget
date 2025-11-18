@@ -1,18 +1,16 @@
 package core
 
 import (
-	"context"
 	"fmt"
 	"net/url"
 	"strings"
 	"time"
 
-	"github.com/chromedp/cdproto/cdp"
-	cdpnetwork "github.com/chromedp/cdproto/network"
-	"github.com/chromedp/chromedp"
+	chrome "logget/src/chrome"
+	"github.com/go-rod/rod/lib/proto"
 )
 
-func SetCookies(ctx context.Context, targetURL string, cookies []string) error {
+func SetCookies(ctx *chrome.ChromeContext, targetURL string, cookies []string) error {
 	if len(cookies) == 0 {
 		return nil
 	}
@@ -24,6 +22,7 @@ func SetCookies(ctx context.Context, targetURL string, cookies []string) error {
 	if !strings.Contains(domain, ".") {
 		domain = "." + domain
 	}
+	rodCookies := []*proto.NetworkCookie{}
 	for _, cookieStr := range cookies {
 		parts := strings.Split(cookieStr, ";")
 		nameValue := strings.TrimSpace(parts[0])
@@ -37,8 +36,8 @@ func SetCookies(ctx context.Context, targetURL string, cookies []string) error {
 		path := "/"
 		secure := parsedURL.Scheme == "https"
 		httpOnly := false
-		sameSite := ""
-		var expires *time.Time
+	var sameSite proto.NetworkCookieSameSite
+	var expires *proto.TimeSinceEpoch
 		for i := 1; i < len(parts); i++ {
 			attr := strings.TrimSpace(parts[i])
 			attrLower := strings.ToLower(attr)
@@ -52,35 +51,56 @@ func SetCookies(ctx context.Context, targetURL string, cookies []string) error {
 			case attrLower == "httponly":
 				httpOnly = true
 			case strings.HasPrefix(attrLower, "samesite="):
-				sameSite = strings.TrimSpace(attr[9:])
+				sameSiteStr := strings.ToLower(strings.TrimSpace(attr[9:]))
+				switch sameSiteStr {
+				case "strict":
+					sameSite = proto.NetworkCookieSameSiteStrict
+				case "lax":
+					sameSite = proto.NetworkCookieSameSiteLax
+				case "none":
+					sameSite = proto.NetworkCookieSameSiteNone
+				}
 			case strings.HasPrefix(attrLower, "expires="):
 				expiresStr := strings.TrimSpace(attr[8:])
 				if parsedExpires, err := time.Parse(time.RFC1123, expiresStr); err == nil {
-					expires = &parsedExpires
+					expiresTS := proto.TimeSinceEpoch(parsedExpires.Unix())
+					expires = &expiresTS
 				} else if parsedExpires, err := time.Parse(time.RFC1123Z, expiresStr); err == nil {
-					expires = &parsedExpires
+					expiresTS := proto.TimeSinceEpoch(parsedExpires.Unix())
+					expires = &expiresTS
 				} else {
 					return fmt.Errorf("invalid expires format: %s", expiresStr)
 				}
 			}
 		}
-		cookieCmd := cdpnetwork.SetCookie(name, value).WithDomain(cookieDomain).WithPath(path).WithSecure(secure).WithHTTPOnly(httpOnly)
+		cookie := &proto.NetworkCookie{
+			Name:     name,
+			Value:    value,
+			Domain:   cookieDomain,
+			Path:     path,
+			Secure:   secure,
+			HTTPOnly: httpOnly,
+		}
 		if sameSite != "" {
-			switch strings.ToLower(sameSite) {
-			case "strict":
-				cookieCmd = cookieCmd.WithSameSite(cdpnetwork.CookieSameSiteStrict)
-			case "lax":
-				cookieCmd = cookieCmd.WithSameSite(cdpnetwork.CookieSameSiteLax)
-			case "none":
-				cookieCmd = cookieCmd.WithSameSite(cdpnetwork.CookieSameSiteNone)
-			}
+			cookie.SameSite = sameSite
 		}
 		if expires != nil {
-			expiresTime := cdp.TimeSinceEpoch(*expires)
-			cookieCmd = cookieCmd.WithExpires(&expiresTime)
+			cookie.Expires = proto.TimeSinceEpoch(*expires)
 		}
-		if err := chromedp.Run(ctx, cookieCmd); err != nil {
-			return fmt.Errorf("failed to set cookie %s: %v", name, err)
+		rodCookies = append(rodCookies, cookie)
+	}
+	if len(rodCookies) > 0 {
+		for _, cookie := range rodCookies {
+			ctx.Page.MustSetCookies(&proto.NetworkCookieParam{
+				Name:     cookie.Name,
+				Value:    cookie.Value,
+				Domain:   cookie.Domain,
+				Path:     cookie.Path,
+				Secure:   cookie.Secure,
+				HTTPOnly: cookie.HTTPOnly,
+				SameSite: cookie.SameSite,
+				Expires:  cookie.Expires,
+			})
 		}
 	}
 	return nil
