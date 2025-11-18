@@ -63,7 +63,7 @@ func initCommand(cfg Config, url string) (*core.Logger, *OutputFormatter, Config
 func setupChromeContext(cfg Config, url string, logger *core.Logger) (*chrome.ChromeContext, context.CancelFunc, string) {
 	url = helpers.NormalizeURL(url)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.Timeout)*time.Millisecond)
-	chromeCtx, chromeCancel, err := chrome.CreateChromeContext(ctx, cfg.SkipSSLVerify)
+	chromeCtx, chromeCancel, err := chrome.CreateChromeContext(ctx, cfg.SkipSSLVerify, cfg.Quiet)
 	if err != nil {
 		cancel()
 		logger.Fatal("Failed to create Chrome context: %v", err)

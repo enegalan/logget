@@ -3,6 +3,9 @@ package chrome
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
+	"strings"
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
@@ -69,7 +72,8 @@ type ChromeContext struct {
 	Ctx     context.Context
 }
 
-func CreateChromeContext(ctx context.Context, skipSSLVerify bool) (*ChromeContext, context.CancelFunc, error) {
+func CreateChromeContext(ctx context.Context, skipSSLVerify bool, quiet bool) (*ChromeContext, context.CancelFunc, error) {
+	fmt.Fprintf(os.Stderr, "Installing Chromium automatically (this may take a while)...\n")
 	launcher := launcher.New().
 		Headless(true).
 		NoSandbox(true).
@@ -99,6 +103,9 @@ func CreateChromeContext(ctx context.Context, skipSSLVerify bool) (*ChromeContex
 		Set("enable-automation", "false").
 		Set("password-store", "basic").
 		Set("use-mock-keychain")
+	if quiet {
+		launcher = launcher.Logger(io.Discard)
+	}
 	if skipSSLVerify {
 		launcher = launcher.
 			Set("ignore-certificate-errors-spki-list").
@@ -107,6 +114,14 @@ func CreateChromeContext(ctx context.Context, skipSSLVerify bool) (*ChromeContex
 	}
 	url, err := launcher.Launch()
 	if err != nil {
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "cannot open shared object file") ||
+			strings.Contains(errMsg, "No such file or directory") {
+			return nil, nil, fmt.Errorf("failed to launch browser: %v\n\n"+
+				"Chromium requires system libraries to run. This is a limitation of Chromium itself.\n"+
+				"If you see this error, you may need to install missing libraries.\n"+
+				"For more information, see: https://go-rod.github.io/#/compatibility?id=os", err)
+		}
 		return nil, nil, fmt.Errorf("failed to launch browser: %v", err)
 	}
 	browser := rod.New().ControlURL(url).Context(ctx)

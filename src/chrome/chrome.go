@@ -50,7 +50,7 @@ type StreamConfig struct {
 }
 
 func StreamLogsRealTime(cfg StreamConfig, ctx context.Context, url string, onLog func(LogEntry), onNet func(NetworkEntry), setHeaders func(*ChromeContext, string, []string) error, setCookies func(*ChromeContext, string, []string) error, startFingerprintRotation func(*ChromeContext, int) error) error {
-	chromeCtx, cancel, err := CreateChromeContext(ctx, cfg.SkipSSLVerify)
+	chromeCtx, cancel, err := CreateChromeContext(ctx, cfg.SkipSSLVerify, false)
 	if err != nil {
 		return err
 	}
