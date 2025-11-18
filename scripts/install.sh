@@ -17,7 +17,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 COLORS_SH="$SCRIPT_DIR/colors.sh"
 if [ -f "$COLORS_SH" ]; then
-    source "$COLORS_SH"
+    . "$COLORS_SH"
 fi
 
 BINARY_NAME="logget"
