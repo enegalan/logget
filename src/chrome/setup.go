@@ -24,12 +24,9 @@ func (d *downloadDetector) Write(p []byte) (n int, err error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	content := string(p)
-
-	// Filter out DevTools listening messages
 	if strings.Contains(content, "DevTools listening") {
 		return len(p), nil
 	}
-
 	if !d.messageShown && (strings.Contains(content, "download") ||
 		strings.Contains(content, "Downloading") ||
 		strings.Contains(content, "Installing") ||
@@ -39,7 +36,6 @@ func (d *downloadDetector) Write(p []byte) (n int, err error) {
 			fmt.Fprintf(os.Stderr, "Installing Chromium automatically (this may take a while)...\n")
 		}
 	}
-	// Suppress all logger output - we only show our custom installation message
 	return len(p), nil
 }
 
