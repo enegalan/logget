@@ -350,12 +350,8 @@ func LoadFloat64FromSyncMap(m *sync.Map, key string) (float64, bool) {
 	return 0, false
 }
 
-func requestIDToString(id proto.NetworkRequestID) string {
-	return string(id)
-}
-
 func HandleLoadingFailedEvent(ev *proto.NetworkLoadingFailed, requestMethods *sync.Map, requestURLs *sync.Map) *NetworkEntry {
-	requestID := requestIDToString(ev.RequestID)
+	requestID := string(ev.RequestID)
 	method, _ := LoadStringFromSyncMap(requestMethods, requestID)
 	requestURL, ok := LoadStringFromSyncMap(requestURLs, requestID)
 	if !ok || requestURL == "" {
@@ -369,7 +365,7 @@ func ProcessNetworkEventRequestWillBeSent(ev *proto.NetworkRequestWillBeSent, re
 	if ev.Request == nil {
 		return
 	}
-	requestID := requestIDToString(ev.RequestID)
+	requestID := string(ev.RequestID)
 	requestMethods.Store(requestID, ev.Request.Method)
 	requestURLs.Store(requestID, ev.Request.URL)
 	headers := convertProtoHeaders(ev.Request.Headers)
@@ -384,7 +380,7 @@ func ProcessNetworkEventResponseReceived(ev *proto.NetworkResponseReceived, cfg 
 	if !ShouldIncludeNetworkEvent(cfg, ev) {
 		return nil
 	}
-	requestID := requestIDToString(ev.RequestID)
+	requestID := string(ev.RequestID)
 	method, _ := LoadStringFromSyncMap(requestMethods, requestID)
 	var requestTiming *proto.NetworkResourceTiming
 	var requestStartTime, responseTime float64
@@ -415,7 +411,7 @@ func updateEntryContentDownloadTime(entry *NetworkEntry, contentDownloadTime flo
 }
 
 func ProcessNetworkEventLoadingFinished(ev *proto.NetworkLoadingFinished, networkEntriesMap *sync.Map, startTime time.Time, handlers *EventHandlers) {
-	requestID := requestIDToString(ev.RequestID)
+	requestID := string(ev.RequestID)
 	entryVal, ok := networkEntriesMap.Load(requestID)
 	if !ok {
 		return

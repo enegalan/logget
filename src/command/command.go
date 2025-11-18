@@ -25,10 +25,6 @@ func RunLogget(cfg Config, url string) {
 	syncMaps := helpers.NewSyncMaps()
 	handlers := createEventHandlers(cfg, url, state, syncMaps)
 	setupEventListeners(chromeCtx, cfg, url, state, syncMaps, handlers)
-	// TODO: Remove this sleep once we have a better way to wait for domains to be ready
-	// EachEvent automatically enables domains, but we need to wait a bit for them to be ready
-	// before setting headers/cookies which require Network domain
-	time.Sleep(100 * time.Millisecond)
 	setupHeadersAndCookies(chromeCtx, cfg, url, logger)
 	if cfg.FollowMode {
 		runFollowMode(cfg, url, logger, formatter)

@@ -6,11 +6,42 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
 	"github.com/go-rod/rod/lib/proto"
 )
+
+type downloadDetector struct {
+	mu             sync.Mutex
+	messageShown   bool
+	originalWriter io.Writer
+	quiet          bool
+}
+
+func (d *downloadDetector) Write(p []byte) (n int, err error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	content := string(p)
+
+	// Filter out DevTools listening messages
+	if strings.Contains(content, "DevTools listening") {
+		return len(p), nil
+	}
+
+	if !d.messageShown && (strings.Contains(content, "download") ||
+		strings.Contains(content, "Downloading") ||
+		strings.Contains(content, "Installing") ||
+		strings.Contains(content, "fetch")) {
+		d.messageShown = true
+		if !d.quiet {
+			fmt.Fprintf(os.Stderr, "Installing Chromium automatically (this may take a while)...\n")
+		}
+	}
+	// Suppress all logger output - we only show our custom installation message
+	return len(p), nil
+}
 
 func GetChromeOptions(skipSSLVerify bool) []string {
 	args := []string{
@@ -73,7 +104,6 @@ type ChromeContext struct {
 }
 
 func CreateChromeContext(ctx context.Context, skipSSLVerify bool, quiet bool) (*ChromeContext, context.CancelFunc, error) {
-	fmt.Fprintf(os.Stderr, "Installing Chromium automatically (this may take a while)...\n")
 	launcher := launcher.New().
 		Headless(true).
 		NoSandbox(true).
@@ -105,6 +135,12 @@ func CreateChromeContext(ctx context.Context, skipSSLVerify bool, quiet bool) (*
 		Set("use-mock-keychain")
 	if quiet {
 		launcher = launcher.Logger(io.Discard)
+	} else {
+		detector := &downloadDetector{
+			originalWriter: os.Stderr,
+			quiet:          quiet,
+		}
+		launcher = launcher.Logger(detector)
 	}
 	if skipSSLVerify {
 		launcher = launcher.

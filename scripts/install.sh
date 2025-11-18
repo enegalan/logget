@@ -12,7 +12,6 @@
 
 set -e
 
-# Get script directory (compatible with both bash and sh)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 COLORS_SH="$SCRIPT_DIR/colors.sh"
@@ -264,7 +263,6 @@ if [ -f "$INSTALL_DIR/$BINARY_NAME" ]; then
     read REPLY
     case "$REPLY" in
         [Yy]|"yes"|"Yes"|"YES")
-            # Continue with installation
             ;;
         *)
             echo -e "${YELLOW}Installation cancelled${NC}"
@@ -297,7 +295,6 @@ if [ -f "$INSTALL_DIR/$BINARY_NAME" ] && [ -x "$INSTALL_DIR/$BINARY_NAME" ]; the
     echo -e "${GREEN}Installation complete!${NC}"
     echo -e "${BLUE}Installed version: ${GREEN}$INSTALLED_VERSION${NC}"
     echo -e "${BLUE}Binary location: ${GREEN}$INSTALL_DIR/$BINARY_NAME${NC}"
-    # Check if INSTALL_DIR is in HOME and not in PATH (compatible with sh)
     case "$INSTALL_DIR" in
         "$HOME"*)
             case ":$PATH:" in

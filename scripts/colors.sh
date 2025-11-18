@@ -1,14 +1,10 @@
 #!/bin/sh
 
-# Get script directory (compatible with both bash and sh)
-# Handle both relative and absolute paths
 case "$0" in
 	/*)
-		# Absolute path
 		SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 		;;
 	*)
-		# Relative path - need to resolve it
 		SCRIPT_DIR="$(cd "$(dirname "$(pwd)/$0")" && pwd)"
 		;;
 esac
@@ -17,8 +13,6 @@ COLORS_DEF="$PROJECT_ROOT/src/colors/colors.def"
 
 if [ ! -f "$COLORS_DEF" ]; then
 	echo "Error: $COLORS_DEF not found" >&2
-	echo "Script directory: $SCRIPT_DIR" >&2
-	echo "Project root: $PROJECT_ROOT" >&2
 	exit 1
 fi
 
@@ -56,7 +50,6 @@ convert_name() {
 }
 
 while IFS='=' read -r key value || [ -n "$key" ]; do
-	# Skip empty lines and comments (compatible with sh)
 	case "$key" in
 		"")
 			continue
@@ -65,13 +58,11 @@ while IFS='=' read -r key value || [ -n "$key" ]; do
 			continue
 			;;
 		*)
-			# Trim whitespace from key and value (POSIX compatible)
 			key=$(echo "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 			value=$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 			if [ -z "$key" ] || [ -z "$value" ]; then
 				continue
 			fi
-			# Replace \033 with actual escape character (POSIX compatible)
 			esc_char=$(printf '\033')
 			value=$(echo "$value" | sed "s/\\\\033/$esc_char/g")
 			bash_name=$(convert_name "$key")
