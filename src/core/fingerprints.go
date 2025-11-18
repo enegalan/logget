@@ -1,13 +1,12 @@
 package core
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"math/rand"
 	"time"
 
-	"github.com/chromedp/chromedp"
+	chrome "logget/src/chrome"
 )
 
 type fingerprintConfig struct {
@@ -26,7 +25,7 @@ type fingerprintConfig struct {
 	WebGLRenderer       string   `json:"webglRenderer"`
 }
 
-func RotateNavigatorFingerprints(ctx context.Context, intervalMs int) error {
+func RotateNavigatorFingerprints(ctx *chrome.ChromeContext, intervalMs int) error {
 	fingerprint := generateFingerprint()
 	fingerprintJSON, err := json.Marshal(fingerprint)
 	if err != nil {
@@ -157,14 +156,14 @@ func RotateNavigatorFingerprints(ctx context.Context, intervalMs int) error {
 			};
 		} catch(e) {}
 	})();`, string(fingerprintJSON))
-	var result interface{}
-	if err := chromedp.Run(ctx, chromedp.Evaluate(js, &result)); err != nil {
+	_, err = ctx.Page.Eval(js)
+	if err != nil {
 		return fmt.Errorf("failed to inject fingerprint rotation script: %v", err)
 	}
 	return nil
 }
 
-func StartFingerprintRotation(ctx context.Context, intervalMs int) error {
+func StartFingerprintRotation(ctx *chrome.ChromeContext, intervalMs int) error {
 	if intervalMs <= 0 {
 		return nil
 	}
@@ -176,7 +175,7 @@ func StartFingerprintRotation(ctx context.Context, intervalMs int) error {
 		defer ticker.Stop()
 		for {
 			select {
-			case <-ctx.Done():
+			case <-ctx.Ctx.Done():
 				return
 			case <-ticker.C:
 				if err := RotateNavigatorFingerprints(ctx, intervalMs); err != nil {

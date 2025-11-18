@@ -1,12 +1,10 @@
 package core
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
-	cdpnetwork "github.com/chromedp/cdproto/network"
-	"github.com/chromedp/chromedp"
+	chrome "logget/src/chrome"
 )
 
 type headerDef struct {
@@ -73,8 +71,8 @@ func GenerateHeaders(userAgent string, headers []string, url string) []string {
 	return result
 }
 
-func SetHeaders(ctx context.Context, userAgent string, headers []string) error {
-	headersMap := make(cdpnetwork.Headers)
+func SetHeaders(ctx *chrome.ChromeContext, userAgent string, headers []string) error {
+	headersList := make([]string, 0)
 	hasUserAgent := false
 	for _, header := range headers {
 		if colonIndex := strings.Index(header, ":"); colonIndex != -1 {
@@ -84,14 +82,15 @@ func SetHeaders(ctx context.Context, userAgent string, headers []string) error {
 			if keyLower == "user-agent" {
 				hasUserAgent = true
 			}
-			headersMap[key] = value
+			headersList = append(headersList, key, value)
 		}
 	}
 	if !hasUserAgent && userAgent != "" {
-		headersMap["User-Agent"] = userAgent
+		headersList = append(headersList, "User-Agent", userAgent)
 	}
-	if len(headersMap) > 0 {
-		if err := chromedp.Run(ctx, cdpnetwork.SetExtraHTTPHeaders(headersMap)); err != nil {
+	if len(headersList) > 0 {
+		_, err := ctx.Page.SetExtraHeaders(headersList)
+		if err != nil {
 			return fmt.Errorf("failed to set extra HTTP headers: %v", err)
 		}
 	}

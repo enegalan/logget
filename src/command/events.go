@@ -1,7 +1,6 @@
 package command
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -11,9 +10,16 @@ import (
 	"logget/src/core"
 	helpers "logget/src/helpers"
 
-	cdpnetwork "github.com/chromedp/cdproto/network"
-	"github.com/chromedp/chromedp"
+	"github.com/go-rod/rod/lib/proto"
 )
+
+func convertProtoHeadersForEvents(headers proto.NetworkHeaders) map[string]string {
+	result := make(map[string]string, len(headers))
+	for k, v := range headers {
+		result[k] = fmt.Sprintf("%v", v)
+	}
+	return result
+}
 
 func captureVerboseHeaders(headers map[string]string, reqURL, targetURL string, verbose bool, requestCaptured *bool, requestHeaders *map[string]string) {
 	if verbose && !*requestCaptured && reqURL == targetURL {
@@ -49,43 +55,61 @@ func createEventHandlers(cfg Config, url string, state *executionState, syncMaps
 	}
 }
 
-func setupNetworkHandlerForResponse(evResp *cdpnetwork.EventResponseReceived, handlers *chrome.EventHandlers, showNetwork bool, network *[]chrome.NetworkEntry, networkEntriesMap *sync.Map) {
+func setupNetworkHandlerForResponse(evResp *proto.NetworkResponseReceived, handlers *chrome.EventHandlers, showNetwork bool, network *[]chrome.NetworkEntry, networkEntriesMap *sync.Map) {
 	if !showNetwork {
 		return
 	}
 	handlers.OnNetwork = func(ne chrome.NetworkEntry) {
 		*network = append(*network, ne)
-		networkEntriesMap.Store(evResp.RequestID.String(), &(*network)[len(*network)-1])
+		networkEntriesMap.Store(string(evResp.RequestID), &(*network)[len(*network)-1])
 	}
 }
 
-func setupEventListeners(chromeCtx context.Context, cfg Config, url string, state *executionState, syncMaps *helpers.SyncMaps, handlers *chrome.EventHandlers) {
+func setupEventListeners(chromeCtx *chrome.ChromeContext, cfg Config, url string, state *executionState, syncMaps *helpers.SyncMaps, handlers *chrome.EventHandlers) {
 	showNetworkOrVerbose := cfg.ShowNetwork || cfg.Verbose
 	showLogs := cfg.ShowLogs
-	chromedp.ListenTarget(chromeCtx, func(ev interface{}) {
+	go chromeCtx.Page.EachEvent(func(ev *proto.NetworkRequestWillBeSent) {
 		if showNetworkOrVerbose {
-			if evReq, ok := ev.(*cdpnetwork.EventRequestWillBeSent); ok {
-				chrome.ProcessNetworkEventRequestWillBeSent(evReq, &syncMaps.RequestMethods, &syncMaps.RequestURLs, &syncMaps.RequestStartTimes, state.startTime, handlers)
-			}
-			if evExtra, ok := ev.(*cdpnetwork.EventRequestWillBeSentExtraInfo); ok {
-				if requestURL, ok := helpers.LoadStringFromSyncMap(&syncMaps.RequestURLs, evExtra.RequestID.String()); ok && requestURL == url {
-					headers := chrome.ConvertEventHeaders(evExtra.Headers)
-					captureVerboseHeaders(headers, requestURL, url, cfg.Verbose, &state.requestCaptured, &state.requestHeaders)
-				}
+			chrome.ProcessNetworkEventRequestWillBeSent(ev, &syncMaps.RequestMethods, &syncMaps.RequestURLs, &syncMaps.RequestStartTimes, state.startTime, handlers)
+		}
+	}, func(ev *proto.NetworkRequestWillBeSentExtraInfo) {
+		if showNetworkOrVerbose {
+			if requestURL, ok := helpers.LoadStringFromSyncMap(&syncMaps.RequestURLs, string(ev.RequestID)); ok && requestURL == url {
+				headers := convertProtoHeadersForEvents(ev.Headers)
+				captureVerboseHeaders(headers, requestURL, url, cfg.Verbose, &state.requestCaptured, &state.requestHeaders)
 			}
 		}
-		if showLogs {
-			chrome.ProcessLogEvent(ev, handlers)
-		}
+	}, func(ev *proto.NetworkResponseReceived) {
 		if showNetworkOrVerbose {
 			processResponseEvents(ev, handlers, cfg, state, syncMaps)
 		}
-	})
+	}, func(ev *proto.NetworkLoadingFinished) {
+		if showNetworkOrVerbose {
+			processResponseEvents(ev, handlers, cfg, state, syncMaps)
+		}
+	}, func(ev *proto.NetworkLoadingFailed) {
+		if showNetworkOrVerbose {
+			processResponseEvents(ev, handlers, cfg, state, syncMaps)
+		}
+	}, func(ev *proto.LogEntryAdded) {
+		if showLogs {
+			chrome.ProcessLogEvent(ev, handlers)
+		}
+	}, func(ev *proto.RuntimeConsoleAPICalled) {
+		if showLogs {
+			chrome.ProcessLogEvent(ev, handlers)
+		}
+	}, func(ev *proto.RuntimeExceptionThrown) {
+		if showLogs {
+			chrome.ProcessLogEvent(ev, handlers)
+		}
+	})()
 }
 
 func processResponseEvents(ev interface{}, handlers *chrome.EventHandlers, cfg Config, state *executionState, syncMaps *helpers.SyncMaps) {
-	if evResp, ok := ev.(*cdpnetwork.EventResponseReceived); ok {
-		setupNetworkHandlerForResponse(evResp, handlers, cfg.ShowNetwork, &state.network, &syncMaps.NetworkEntriesMap)
+	switch e := ev.(type) {
+	case *proto.NetworkResponseReceived:
+		setupNetworkHandlerForResponse(e, handlers, cfg.ShowNetwork, &state.network, &syncMaps.NetworkEntriesMap)
 		networkCfg := chrome.StreamNetworkConfig{
 			XHROnly:       cfg.XHROnly,
 			DocumentOnly:  cfg.DocumentOnly,
@@ -104,18 +128,16 @@ func processResponseEvents(ev interface{}, handlers *chrome.EventHandlers, cfg C
 			ShowNetwork:   cfg.ShowNetwork,
 			ShowLogs:      cfg.ShowLogs,
 		}
-		ne := chrome.ProcessNetworkEventResponseReceived(evResp, networkCfg, &syncMaps.RequestMethods, &syncMaps.RequestStartTimes, state.startTime, &syncMaps.NetworkEntriesMap, handlers)
+		ne := chrome.ProcessNetworkEventResponseReceived(e, networkCfg, &syncMaps.RequestMethods, &syncMaps.RequestStartTimes, state.startTime, &syncMaps.NetworkEntriesMap, handlers)
 		if ne != nil && cfg.Verbose && !state.responseCaptured {
 			state.responseHeaders = ne.Headers
 			state.responseCaptured = true
 		}
 		handlers.OnNetwork = nil
-	}
-	if evFinished, ok := ev.(*cdpnetwork.EventLoadingFinished); ok {
-		chrome.ProcessNetworkEventLoadingFinished(evFinished, &syncMaps.NetworkEntriesMap, state.startTime, handlers)
-	}
-	if evFailed, ok := ev.(*cdpnetwork.EventLoadingFailed); ok {
-		ne := chrome.HandleLoadingFailedEvent(evFailed, &syncMaps.RequestMethods, &syncMaps.RequestURLs)
+	case *proto.NetworkLoadingFinished:
+		chrome.ProcessNetworkEventLoadingFinished(e, &syncMaps.NetworkEntriesMap, state.startTime, handlers)
+	case *proto.NetworkLoadingFailed:
+		ne := chrome.HandleLoadingFailedEvent(e, &syncMaps.RequestMethods, &syncMaps.RequestURLs)
 		if ne != nil && cfg.ShowNetwork {
 			state.network = append(state.network, *ne)
 		}

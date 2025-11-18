@@ -10,8 +10,7 @@ import (
 	"sync"
 	"time"
 
-	cdpnetwork "github.com/chromedp/cdproto/network"
-	"github.com/chromedp/chromedp"
+	"github.com/go-rod/rod/lib/proto"
 )
 
 type NetworkMaps struct {
@@ -50,62 +49,65 @@ type StreamConfig struct {
 	MaxSize             int64
 }
 
-func StreamLogsRealTime(cfg StreamConfig, ctx context.Context, url string, onLog func(LogEntry), onNet func(NetworkEntry), setHeaders func(context.Context, string, []string) error, setCookies func(context.Context, string, []string) error, startFingerprintRotation func(context.Context, int) error) error {
+func StreamLogsRealTime(cfg StreamConfig, ctx context.Context, url string, onLog func(LogEntry), onNet func(NetworkEntry), setHeaders func(*ChromeContext, string, []string) error, setCookies func(*ChromeContext, string, []string) error, startFingerprintRotation func(*ChromeContext, int) error) error {
 	chromeCtx, cancel, err := CreateChromeContext(ctx, cfg.SkipSSLVerify)
 	if err != nil {
 		return err
 	}
 	defer cancel()
-	if err := EnableChromeDomains(chromeCtx, cfg.ShowLogs, cfg.ShowNetwork); err != nil {
-		return err
-	}
 	maps := GetNetworkMaps()
 	pageStartTime := time.Now()
 	handlers := &EventHandlers{
 		OnLog:     onLog,
 		OnNetwork: onNet,
 	}
-	chromedp.ListenTarget(chromeCtx, func(ev interface{}) {
-		showNetwork := cfg.ShowNetwork
-		showLogs := cfg.ShowLogs
-		if showNetwork {
-			if evReq, ok := ev.(*cdpnetwork.EventRequestWillBeSent); ok {
-				ProcessNetworkEventRequestWillBeSent(evReq, &maps.Methods, &maps.URLs, &maps.StartTimes, pageStartTime, handlers)
-			}
+	streamCfg := StreamNetworkConfig{
+		XHROnly:       cfg.XHROnly,
+		DocumentOnly:  cfg.DocumentOnly,
+		CssOnly:       cfg.CssOnly,
+		ScriptOnly:    cfg.ScriptOnly,
+		FontOnly:      cfg.FontOnly,
+		ImgOnly:       cfg.ImgOnly,
+		MediaOnly:     cfg.MediaOnly,
+		ManifestOnly:  cfg.ManifestOnly,
+		WebSocketOnly: cfg.WebSocketOnly,
+		MimeRegex:     cfg.MimeRegex,
+		StatusRegex:   cfg.StatusRegex,
+		DomainRegex:   cfg.DomainRegex,
+		MinSize:       cfg.MinSize,
+		MaxSize:       cfg.MaxSize,
+		ShowNetwork:   cfg.ShowNetwork,
+		ShowLogs:      cfg.ShowLogs,
+	}
+	go chromeCtx.Page.EachEvent(func(ev *proto.NetworkRequestWillBeSent) {
+		if cfg.ShowNetwork {
+			ProcessNetworkEventRequestWillBeSent(ev, &maps.Methods, &maps.URLs, &maps.StartTimes, pageStartTime, handlers)
 		}
-		if showLogs {
+	}, func(ev *proto.NetworkResponseReceived) {
+		if cfg.ShowNetwork {
+			ProcessNetworkEventResponseReceived(ev, streamCfg, &maps.Methods, &maps.StartTimes, pageStartTime, &maps.NetworkEntries, handlers)
+		}
+	}, func(ev *proto.NetworkLoadingFinished) {
+		if cfg.ShowNetwork {
+			ProcessNetworkEventLoadingFinished(ev, &maps.NetworkEntries, pageStartTime, handlers)
+		}
+	}, func(ev *proto.NetworkLoadingFailed) {
+		if cfg.ShowNetwork {
+			ProcessNetworkEventLoadingFailed(ev, &maps.Methods, &maps.URLs, handlers)
+		}
+	}, func(ev *proto.LogEntryAdded) {
+		if cfg.ShowLogs {
 			ProcessLogEvent(ev, handlers)
 		}
-		if showNetwork {
-			if evResp, ok := ev.(*cdpnetwork.EventResponseReceived); ok {
-				streamCfg := StreamNetworkConfig{
-					XHROnly:       cfg.XHROnly,
-					DocumentOnly:  cfg.DocumentOnly,
-					CssOnly:       cfg.CssOnly,
-					ScriptOnly:    cfg.ScriptOnly,
-					FontOnly:      cfg.FontOnly,
-					ImgOnly:       cfg.ImgOnly,
-					MediaOnly:     cfg.MediaOnly,
-					ManifestOnly:  cfg.ManifestOnly,
-					WebSocketOnly: cfg.WebSocketOnly,
-					MimeRegex:     cfg.MimeRegex,
-					StatusRegex:   cfg.StatusRegex,
-					DomainRegex:   cfg.DomainRegex,
-					MinSize:       cfg.MinSize,
-					MaxSize:       cfg.MaxSize,
-					ShowNetwork:   cfg.ShowNetwork,
-					ShowLogs:      cfg.ShowLogs,
-				}
-				ProcessNetworkEventResponseReceived(evResp, streamCfg, &maps.Methods, &maps.StartTimes, pageStartTime, &maps.NetworkEntries, handlers)
-			}
-			if evFinished, ok := ev.(*cdpnetwork.EventLoadingFinished); ok {
-				ProcessNetworkEventLoadingFinished(evFinished, &maps.NetworkEntries, pageStartTime, handlers)
-			}
-			if evFailed, ok := ev.(*cdpnetwork.EventLoadingFailed); ok {
-				ProcessNetworkEventLoadingFailed(evFailed, &maps.Methods, &maps.URLs, handlers)
-			}
+	}, func(ev *proto.RuntimeConsoleAPICalled) {
+		if cfg.ShowLogs {
+			ProcessLogEvent(ev, handlers)
 		}
-	})
+	}, func(ev *proto.RuntimeExceptionThrown) {
+		if cfg.ShowLogs {
+			ProcessLogEvent(ev, handlers)
+		}
+	})()
 	if len(cfg.Headers) > 0 || cfg.UserAgent != "" {
 		if err := setHeaders(chromeCtx, cfg.UserAgent, cfg.Headers); err != nil {
 			return fmt.Errorf("failed to set headers: %v", err)
@@ -116,15 +118,16 @@ func StreamLogsRealTime(cfg StreamConfig, ctx context.Context, url string, onLog
 			return fmt.Errorf("failed to set cookies: %v", err)
 		}
 	}
-	if err := chromedp.Run(chromeCtx, chromedp.Navigate(url)); err != nil {
+	if err := chromeCtx.Page.Navigate(url); err != nil {
 		return fmt.Errorf("failed to navigate to %s: %v", url, err)
 	}
+	chromeCtx.Page.MustWaitLoad()
 	if cfg.RotateFingerprints {
 		if err := startFingerprintRotation(chromeCtx, cfg.FingerprintInterval); err != nil {
 			return fmt.Errorf("failed to start fingerprint rotation: %v", err)
 		}
 	}
-	<-chromeCtx.Done()
+	<-ctx.Done()
 	return nil
 }
 

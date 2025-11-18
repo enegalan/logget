@@ -14,8 +14,6 @@ import (
 	"logget/src/flags"
 	helpers "logget/src/helpers"
 	"logget/src/io"
-
-	"github.com/chromedp/chromedp"
 )
 
 func RunLogget(cfg Config, url string) {
@@ -24,10 +22,13 @@ func RunLogget(cfg Config, url string) {
 	defer chromeCancel()
 	initialProtocol, initialStatusCode := getInitialResponse(cfg, url, logger)
 	state := initializeState(initialProtocol, initialStatusCode)
-	enableChromeDomains(chromeCtx, cfg, logger)
 	syncMaps := helpers.NewSyncMaps()
 	handlers := createEventHandlers(cfg, url, state, syncMaps)
 	setupEventListeners(chromeCtx, cfg, url, state, syncMaps, handlers)
+	// TODO: Remove this sleep once we have a better way to wait for domains to be ready
+	// EachEvent automatically enables domains, but we need to wait a bit for them to be ready
+	// before setting headers/cookies which require Network domain
+	time.Sleep(100 * time.Millisecond)
 	setupHeadersAndCookies(chromeCtx, cfg, url, logger)
 	if cfg.FollowMode {
 		runFollowMode(cfg, url, logger, formatter)
@@ -59,7 +60,7 @@ func initCommand(cfg Config, url string) (*core.Logger, *OutputFormatter, Config
 	return logger, formatter, cfg
 }
 
-func setupChromeContext(cfg Config, url string, logger *core.Logger) (context.Context, context.CancelFunc, string) {
+func setupChromeContext(cfg Config, url string, logger *core.Logger) (*chrome.ChromeContext, context.CancelFunc, string) {
 	url = helpers.NormalizeURL(url)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.Timeout)*time.Millisecond)
 	chromeCtx, chromeCancel, err := chrome.CreateChromeContext(ctx, cfg.SkipSSLVerify)
@@ -83,18 +84,7 @@ func getInitialResponse(cfg Config, url string, logger *core.Logger) (string, in
 	return initialProtocol, initialStatusCode
 }
 
-func enableChromeDomains(chromeCtx context.Context, cfg Config, logger *core.Logger) {
-	showNetworkOrVerbose := cfg.ShowNetwork || cfg.Verbose
-	if err := chrome.EnableChromeDomains(chromeCtx, cfg.ShowLogs, showNetworkOrVerbose); err != nil {
-		if cfg.ShowLogs {
-			logger.Fatal("Failed to enable log domains: %v", err)
-		} else {
-			logger.Error("Failed to enable network domain: %v", err)
-		}
-	}
-}
-
-func setupHeadersAndCookies(chromeCtx context.Context, cfg Config, url string, logger *core.Logger) {
+func setupHeadersAndCookies(chromeCtx *chrome.ChromeContext, cfg Config, url string, logger *core.Logger) {
 	if len(cfg.Headers) > 0 || cfg.UserAgent != "" {
 		if err := core.SetHeaders(chromeCtx, cfg.UserAgent, cfg.Headers); err != nil {
 			logger.Fatal("Failed to set headers: %v", err)
@@ -170,15 +160,13 @@ func runFollowMode(cfg Config, url string, logger *core.Logger, formatter *Outpu
 	}
 }
 
-func runNormalMode(chromeCtx context.Context, cfg Config, url string, state *executionState, logger *core.Logger, formatter *OutputFormatter) {
+func runNormalMode(chromeCtx *chrome.ChromeContext, cfg Config, url string, state *executionState, logger *core.Logger, formatter *OutputFormatter) {
 	logger.Progress("Navigating to %s...", url)
-	tasks := []chromedp.Action{
-		chromedp.Navigate(url),
-		chromedp.Sleep(time.Duration(cfg.Wait) * time.Millisecond),
-	}
-	if err := chromedp.Run(chromeCtx, tasks...); err != nil {
+	if err := chromeCtx.Page.Navigate(url); err != nil {
 		handleNavigationError(err, state.responseProtocol, url, state.startTime, cfg.Verbose, logger)
 	}
+	chromeCtx.Page.MustWaitLoad()
+	time.Sleep(time.Duration(cfg.Wait) * time.Millisecond)
 	if cfg.RotateFingerprints {
 		if cfg.FingerprintInterval <= 0 {
 			logger.Warn("Fingerprint rotation interval is invalid, disabling rotation")
