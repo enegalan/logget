@@ -31,131 +31,97 @@ func RotateNavigatorFingerprints(ctx *chrome.ChromeContext, intervalMs int) erro
 	if err != nil {
 		return fmt.Errorf("failed to marshal fingerprint: %v", err)
 	}
-	js := fmt.Sprintf(`(function() {
-		const fingerprint = %s;
-		try { // Override navigator.userAgent
-			Object.defineProperty(navigator, 'userAgent', {
-				get: function() { return fingerprint.userAgent; },
-				configurable: true
-			});
-		} catch(e) {}
-		try { // Override navigator.platform
-			Object.defineProperty(navigator, 'platform', {
-				get: function() { return fingerprint.platform; },
-				configurable: true
-			});
-		} catch(e) {}
-		try { // Override navigator.language
-			Object.defineProperty(navigator, 'language', {
-				get: function() { return fingerprint.language; },
-				configurable: true
-			});
-		} catch(e) {}
-		try { // Override navigator.languages
-			Object.defineProperty(navigator, 'languages', {
-				get: function() { return fingerprint.languages; },
-				configurable: true
-			});
-		} catch(e) {}
-		try { // Override navigator.hardwareConcurrency
-			Object.defineProperty(navigator, 'hardwareConcurrency', {
-				get: function() { return fingerprint.hardwareConcurrency; },
-				configurable: true
-			});
-		} catch(e) {}
-		try { // Override navigator.deviceMemory
-			if (!('deviceMemory' in navigator)) return;
-			Object.defineProperty(navigator, 'deviceMemory', {
-				get: function() { return fingerprint.deviceMemory; },
-				configurable: true
-			});
-		} catch(e) {}
-		try { // Override navigator.maxTouchPoints
-			Object.defineProperty(navigator, 'maxTouchPoints', {
-				get: function() { return fingerprint.maxTouchPoints; },
-				configurable: true
-			});
-		} catch(e) {}
-		try { // Override screen properties
-			Object.defineProperty(screen, 'width', {
-				get: function() { return fingerprint.screenWidth; },
-				configurable: true
-			});
-			Object.defineProperty(screen, 'height', {
-				get: function() { return fingerprint.screenHeight; },
-				configurable: true
-			});
-			Object.defineProperty(screen, 'availWidth', {
-				get: function() { return fingerprint.screenWidth; },
-				configurable: true
-			});
-			Object.defineProperty(screen, 'availHeight', {
-				get: function() { return fingerprint.screenHeight - 40; },
-				configurable: true
-			});
-			Object.defineProperty(screen, 'colorDepth', {
-				get: function() { return fingerprint.colorDepth; },
-				configurable: true
-			});
-			Object.defineProperty(screen, 'pixelDepth', {
-				get: function() { return fingerprint.pixelDepth; },
-				configurable: true
-			});
-		} catch(e) {}
-		try { // Override WebGL vendor/renderer
-			if (typeof WebGLRenderingContext === 'undefined') return;
-			const getParameter = WebGLRenderingContext.prototype.getParameter;
-			WebGLRenderingContext.prototype.getParameter = function(parameter) {
-				if (parameter === 37445) return fingerprint.webglVendor;
-				if (parameter === 37446) return fingerprint.webglRenderer;
-				return getParameter.call(this, parameter);
-			};
-		} catch(e) {}
-		try { // Override Canvas fingerprinting with random noise
-			const originalGetImageData = CanvasRenderingContext2D.prototype.getImageData;
-			CanvasRenderingContext2D.prototype.getImageData = function(sx, sy, sw, sh) {
-				const imageData = originalGetImageData.call(this, sx, sy, sw, sh);
-				if (!imageData || !imageData.data) return imageData;
-				for (let i = 0; i < imageData.data.length; i += 4) {
-					const noise = (Math.random() - 0.5) * 2;
-					imageData.data[i] = Math.max(0, Math.min(255, imageData.data[i] + noise));
+	js := fmt.Sprintf(`() => {
+		try {
+			if (typeof Object === 'undefined' || typeof Object.defineProperty !== 'function') return;
+			const fingerprint = %s;
+			if (!fingerprint || typeof fingerprint !== 'object') return;
+			if (typeof navigator === 'undefined' || navigator === null) return;
+			if (typeof window !== 'undefined') {
+				if (!window.__loggetFingerprintValues) {
+					window.__loggetFingerprintValues = {};
 				}
-				return imageData;
-			};
-			const originalToBlob = HTMLCanvasElement.prototype.toBlob;
-			HTMLCanvasElement.prototype.toBlob = function(callback, type, quality) {
-				const canvas = this;
-				const ctx = canvas.getContext('2d');
-				if (!ctx) return originalToBlob.call(this, callback, type, quality);
-				try {
-					const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-					if (!imageData || !imageData.data) return originalToBlob.call(this, callback, type, quality);
-					for (let i = 0; i < imageData.data.length; i += 4) {
-						const noise = (Math.random() - 0.5) * 2;
-						imageData.data[i] = Math.max(0, Math.min(255, imageData.data[i] + noise));
+				var values = window.__loggetFingerprintValues;
+				
+				if (fingerprint.userAgent) values.userAgent = fingerprint.userAgent;
+				if (fingerprint.platform) values.platform = fingerprint.platform;
+				if (fingerprint.language) values.language = fingerprint.language;
+				if (fingerprint.languages) values.languages = fingerprint.languages;
+				if (typeof fingerprint.hardwareConcurrency !== 'undefined') values.hardwareConcurrency = fingerprint.hardwareConcurrency;
+				if (typeof fingerprint.deviceMemory !== 'undefined') values.deviceMemory = fingerprint.deviceMemory;
+				if (typeof fingerprint.maxTouchPoints !== 'undefined') values.maxTouchPoints = fingerprint.maxTouchPoints;
+				if (typeof fingerprint.screenWidth !== 'undefined') values.screenWidth = fingerprint.screenWidth;
+				if (typeof fingerprint.screenHeight !== 'undefined') values.screenHeight = fingerprint.screenHeight;
+				if (typeof fingerprint.colorDepth !== 'undefined') values.colorDepth = fingerprint.colorDepth;
+				if (typeof fingerprint.pixelDepth !== 'undefined') values.pixelDepth = fingerprint.pixelDepth;
+				function safeDefineProperty(obj, prop, valueKey) {
+					try {
+						if (!obj || typeof obj !== 'object' || obj === null) return;
+						if (!prop || typeof prop !== 'string') return;
+						if (!valueKey || typeof valueKey !== 'string') return;
+						if (!values || typeof values !== 'object') return;
+						if (typeof values[valueKey] === 'undefined') return;
+						
+						var val = values[valueKey];
+						if (val === undefined || val === null) return;
+						try {
+							Object.defineProperty(obj, prop, {
+								get: function() { return val; },
+								configurable: true
+							});
+						} catch(e) {
+							// Ignore - property may not be configurable
+						}
+					} catch(e) {
+						// Ignore all errors
 					}
-					ctx.putImageData(imageData, 0, 0);
+				}
+				try { // Override navigator.userAgent
+					if (values.userAgent) safeDefineProperty(navigator, 'userAgent', 'userAgent');
 				} catch(e) {}
-				return originalToBlob.call(this, callback, type, quality);
-			};
-			const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
-			HTMLCanvasElement.prototype.toDataURL = function(type, quality) {
-				const canvas = this;
-				const ctx = canvas.getContext('2d');
-				if (!ctx) return originalToDataURL.call(this, type, quality);
-				try {
-					const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-					if (!imageData || !imageData.data) return originalToDataURL.call(this, type, quality);
-					for (let i = 0; i < imageData.data.length; i += 4) {
-						const noise = (Math.random() - 0.5) * 2;
-						imageData.data[i] = Math.max(0, Math.min(255, imageData.data[i] + noise));
+				try { // Override navigator.platform
+					if (values.platform) safeDefineProperty(navigator, 'platform', 'platform');
+				} catch(e) {}
+				try { // Override navigator.language
+					if (values.language) safeDefineProperty(navigator, 'language', 'language');
+				} catch(e) {}
+				try { // Override navigator.languages
+					if (values.languages) safeDefineProperty(navigator, 'languages', 'languages');
+				} catch(e) {}
+				try { // Override navigator.hardwareConcurrency
+					if (typeof values.hardwareConcurrency !== 'undefined') safeDefineProperty(navigator, 'hardwareConcurrency', 'hardwareConcurrency');
+				} catch(e) {}
+				try { // Override navigator.deviceMemory
+					if (typeof navigator !== 'undefined' && 'deviceMemory' in navigator && typeof values.deviceMemory !== 'undefined') {
+						safeDefineProperty(navigator, 'deviceMemory', 'deviceMemory');
 					}
-					ctx.putImageData(imageData, 0, 0);
 				} catch(e) {}
-				return originalToDataURL.call(this, type, quality);
-			};
-		} catch(e) {}
-	})();`, string(fingerprintJSON))
+				try { // Override navigator.maxTouchPoints
+					if (typeof values.maxTouchPoints !== 'undefined') safeDefineProperty(navigator, 'maxTouchPoints', 'maxTouchPoints');
+				} catch(e) {}
+				try { // Override screen properties
+					if (typeof screen !== 'undefined') {
+						if (typeof values.screenWidth !== 'undefined') safeDefineProperty(screen, 'width', 'screenWidth');
+						if (typeof values.screenHeight !== 'undefined') safeDefineProperty(screen, 'height', 'screenHeight');
+						if (typeof values.screenWidth !== 'undefined') safeDefineProperty(screen, 'availWidth', 'screenWidth');
+						if (typeof values.screenHeight !== 'undefined') {
+							try {
+								var availH = values.screenHeight - 40;
+								Object.defineProperty(screen, 'availHeight', {
+									get: function() { return availH; },
+									configurable: true
+								});
+							} catch(e) {}
+						}
+						if (typeof values.colorDepth !== 'undefined') safeDefineProperty(screen, 'colorDepth', 'colorDepth');
+						if (typeof values.pixelDepth !== 'undefined') safeDefineProperty(screen, 'pixelDepth', 'pixelDepth');
+					}
+				} catch(e) {}
+			}
+		} catch(e) {
+			// Ignore all errors
+		}
+	}`, string(fingerprintJSON))
 	_, err = ctx.Page.Eval(js)
 	if err != nil {
 		return fmt.Errorf("failed to inject fingerprint rotation script: %v", err)
