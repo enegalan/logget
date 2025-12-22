@@ -2,6 +2,7 @@ package command
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
@@ -10,10 +11,13 @@ import (
 	"time"
 
 	chrome "logget/src/chrome"
+	"logget/src/colors"
 	"logget/src/core"
 	"logget/src/flags"
 	helpers "logget/src/helpers"
 	"logget/src/io"
+
+	"gopkg.in/yaml.v3"
 )
 
 func RunLogget(cfg Config, url string) {
@@ -119,6 +123,12 @@ func runFollowMode(cfg Config, url string, logger *core.Logger, formatter *Outpu
 		}
 		OutputNetworkEntry(ne, cfg, &headerWrittenNet, outputErrorTracker, cfg.JSONOutput, cfg.YAMLOutput, cfg.CSVOutput, formatter, logger)
 	}
+	onJavaScriptResult := func(result interface{}, err error) {
+		if err != nil {
+			return
+		}
+		outputJSResult(result, cfg, logger)
+	}
 	sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	streamCfg := chrome.StreamConfig{
@@ -144,6 +154,7 @@ func runFollowMode(cfg Config, url string, logger *core.Logger, formatter *Outpu
 		DomainRegex:         cfg.DomainRegex,
 		MinSize:             cfg.MinSize,
 		MaxSize:             cfg.MaxSize,
+		ExecuteJS:           cfg.ExecuteJS,
 	}
 	if cfg.RotateFingerprints {
 		if cfg.FingerprintInterval <= 0 {
@@ -151,7 +162,7 @@ func runFollowMode(cfg Config, url string, logger *core.Logger, formatter *Outpu
 			streamCfg.RotateFingerprints = false
 		}
 	}
-	if err := chrome.StreamLogsRealTime(streamCfg, sigCtx, url, onLog, onNet, core.SetHeaders, core.SetCookies, core.StartFingerprintRotation); err != nil {
+	if err := chrome.StreamLogsRealTime(streamCfg, sigCtx, url, onLog, onNet, core.SetHeaders, core.SetCookies, core.StartFingerprintRotation, core.ExecuteJavaScript, onJavaScriptResult); err != nil {
 		logger.Fatal("Error streaming logs: %v", err)
 	}
 }
@@ -172,6 +183,14 @@ func runNormalMode(chromeCtx *chrome.ChromeContext, cfg Config, url string, stat
 			}
 		}
 	}
+	if cfg.ExecuteJS != "" {
+		result, err := core.ExecuteJavaScript(chromeCtx, cfg.ExecuteJS)
+		if err != nil {
+			logger.Error("%v", err)
+		} else {
+			outputJSResult(result, cfg, logger)
+		}
+	}
 	logger.Success("Successfully loaded page: %s", url)
 	statusCode := state.responseStatusCode
 	duration := time.Since(state.startTime)
@@ -185,6 +204,45 @@ func runNormalMode(chromeCtx *chrome.ChromeContext, cfg Config, url string, stat
 		Duration: duration,
 	}
 	WriteFinalOutput(cfg, outputData, filteredNetwork, url, state.startTime, state.responseProtocol, statusCode, duration, logger, formatter, cfg.JSONOutput, cfg.YAMLOutput, cfg.Verbose, cfg.ShowLogs, cfg.ShowNetwork, state.requestCaptured, state.requestHeaders, state.responseHeaders)
+}
+
+func outputJSResult(result interface{}, cfg Config, logger *core.Logger) {
+	if result == nil {
+		return
+	}
+	var output strings.Builder
+	if cfg.JSONOutput {
+		jsonData, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			logger.Warn("Failed to marshal JavaScript result: %v", err)
+			return
+		}
+		output.WriteString(string(jsonData))
+		output.WriteString("\n")
+	} else if cfg.YAMLOutput {
+		yamlData, err := yaml.Marshal(result)
+		if err != nil {
+			logger.Warn("Failed to marshal JavaScript result: %v", err)
+			return
+		}
+		output.WriteString(string(yamlData))
+		output.WriteString("\n")
+	} else {
+		formatter := NewOutputFormatter(!cfg.NoColor)
+		output.WriteString("\n=== ")
+		headerText := formatter.theme.Bold("JAVASCRIPT RESULT")
+		header := formatter.Colorize(colors.Cyan, headerText)
+		output.WriteString(header)
+		output.WriteString(" ===\n")
+		jsonData, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			output.WriteString(fmt.Sprintf("%v\n", result))
+		} else {
+			output.WriteString(string(jsonData))
+			output.WriteString("\n")
+		}
+	}
+	writeOutputAndLog(cfg, output.String(), "JavaScript result", logger)
 }
 
 func FormatCobraError(err error) string {

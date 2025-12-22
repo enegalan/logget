@@ -52,6 +52,7 @@ type Config struct {
 	RefreshInterval     int
 	NoColor             bool
 	Quiet               bool
+	ExecuteJS           string
 }
 
 func compileConfigRegexp(cfg Config) Config {

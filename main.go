@@ -53,6 +53,7 @@ var (
 	quiet         flags.BoolFlag
 	minSize       flags.SizeBytes
 	maxSize       flags.SizeBytes
+	executeJS     flags.SimpleFlag[string]
 )
 
 func main() {
@@ -116,6 +117,7 @@ func initFlags(cmd *cobra.Command) {
 		{Flag: &cookies, Name: "cookie", Short: "C", Desc: "Add cookies (format: 'name=value' or 'name=value; domain=example.com') or filename containing cookies", Value: []string{}},
 		{Flag: &minSize, Name: "min-size", Short: "", Desc: "Only include requests whose size is at least this many bytes", Value: int64(0)},
 		{Flag: &maxSize, Name: "max-size", Short: "", Desc: "Only include requests whose size is at most this many bytes", Value: int64(0)},
+		{Flag: &executeJS, Name: "execute", Short: "e", Desc: "Execute JavaScript code in the page context (can be code or file path)", Value: ""},
 	}
 	for _, f := range allFlags {
 		flags.RegisterFlag(cmd, f)
@@ -171,6 +173,7 @@ func runLogget(cmd *cobra.Command, args []string) {
 		Quiet:               quiet.Get(),
 		MinSize:             minSize.Get(),
 		MaxSize:             maxSize.Get(),
+		ExecuteJS:           executeJS.Get(),
 	}
 	command.RunLogget(cfg, url)
 }

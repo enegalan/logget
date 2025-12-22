@@ -6,6 +6,7 @@ A command-line tool to extract browser logs and network data from web pages usin
 
 - **Console Log Collection**: Capture all console.log, console.error, console.warn, and console.info messages
 - **Network Monitoring**: Track all HTTP requests (fetch, XMLHttpRequest) with headers, status codes, and timing
+- **JavaScript Execution**: Execute JavaScript code in the page context for debugging and testing (supports inline code or file path)
 - **Cross-Platform**: Works on Windows, Linux, and macOS
 - **No Chrome Required**: Automatically downloads and uses Chromium via `rod`
 - **Custom Headers**: Add custom HTTP headers like curl (supports files)

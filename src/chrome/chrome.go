@@ -47,9 +47,10 @@ type StreamConfig struct {
 	DomainRegex         *regexp.Regexp
 	MinSize             int64
 	MaxSize             int64
+	ExecuteJS           string
 }
 
-func StreamLogsRealTime(cfg StreamConfig, ctx context.Context, url string, onLog func(LogEntry), onNet func(NetworkEntry), setHeaders func(*ChromeContext, string, []string) error, setCookies func(*ChromeContext, string, []string) error, startFingerprintRotation func(*ChromeContext, int) error) error {
+func StreamLogsRealTime(cfg StreamConfig, ctx context.Context, url string, onLog func(LogEntry), onNet func(NetworkEntry), setHeaders func(*ChromeContext, string, []string) error, setCookies func(*ChromeContext, string, []string) error, startFingerprintRotation func(*ChromeContext, int) error, executeJavaScript func(*ChromeContext, string) (interface{}, error), onJavaScriptResult func(interface{}, error)) error {
 	chromeCtx, cancel, err := CreateChromeContext(ctx, cfg.SkipSSLVerify, false)
 	if err != nil {
 		return err
@@ -125,6 +126,20 @@ func StreamLogsRealTime(cfg StreamConfig, ctx context.Context, url string, onLog
 	if cfg.RotateFingerprints {
 		if err := startFingerprintRotation(chromeCtx, cfg.FingerprintInterval); err != nil {
 			return fmt.Errorf("failed to start fingerprint rotation: %v", err)
+		}
+	}
+	if cfg.ExecuteJS != "" && executeJavaScript != nil {
+		result, err := executeJavaScript(chromeCtx, cfg.ExecuteJS)
+		if onJavaScriptResult != nil {
+			onJavaScriptResult(result, err)
+		} else {
+			if err != nil {
+				handlers.OnLog(createLogEntry("error", err.Error(), "javascript"))
+			} else if result != nil {
+				handlers.OnLog(createLogEntry("info", fmt.Sprintf("JavaScript result: %v", result), "javascript"))
+			} else {
+				handlers.OnLog(createLogEntry("info", "JavaScript executed successfully", "javascript"))
+			}
 		}
 	}
 	<-ctx.Done()
