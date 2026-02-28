@@ -13,6 +13,8 @@ import (
 	"github.com/go-rod/rod/lib/proto"
 )
 
+const initialResponseTimeout = 5 * time.Second
+
 type NetworkMaps struct {
 	Methods        sync.Map
 	URLs           sync.Map
@@ -156,7 +158,7 @@ func GetInitialResponse(skipSSLVerify bool, userAgent string, headers []string, 
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
-		Timeout: 5 * time.Second,
+		Timeout: initialResponseTimeout,
 	}
 	req, err := http.NewRequest("GET", targetURL, nil)
 	if err != nil {

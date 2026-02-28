@@ -53,6 +53,8 @@ type Config struct {
 	NoColor             bool
 	Quiet               bool
 	ExecuteJS           string
+	Interactions        []string
+	WaitAfterInteraction int
 }
 
 func compileConfigRegexp(cfg Config) Config {

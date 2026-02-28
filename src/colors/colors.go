@@ -5,6 +5,13 @@ import (
 	"strings"
 )
 
+const (
+	httpStatusSuccessStart     = 200
+	httpStatusRedirectStart    = 300
+	httpStatusClientErrorStart = 400
+	httpStatusServerErrorStart = 500
+)
+
 //go:embed colors.def
 var colorsDefData string
 var (
@@ -189,13 +196,16 @@ func (ct *ColorTheme) Dim(text string) string {
 }
 
 func (ct *ColorTheme) GetStatusColor(statusCode int) string {
-	if statusCode >= 200 && statusCode < 300 {
+	if statusCode >= httpStatusSuccessStart && statusCode < httpStatusRedirectStart {
 		return ct.StatusSuccess
-	} else if statusCode >= 300 && statusCode < 400 {
+	}
+	if statusCode >= httpStatusRedirectStart && statusCode < httpStatusClientErrorStart {
 		return ct.StatusRedirect
-	} else if statusCode >= 400 && statusCode < 500 {
+	}
+	if statusCode >= httpStatusClientErrorStart && statusCode < httpStatusServerErrorStart {
 		return ct.StatusClientError
-	} else if statusCode >= 500 {
+	}
+	if statusCode >= httpStatusServerErrorStart {
 		return ct.StatusServerError
 	}
 	return ""

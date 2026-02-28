@@ -14,6 +14,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const maxOutputErrorsToShow = 5
+
 func ValidateOutputFormats(cfg Config) {
 	formatCount := 0
 	for _, f := range []bool{cfg.JSONOutput, cfg.YAMLOutput, cfg.CSVOutput, cfg.HAROutput} {
@@ -41,7 +43,7 @@ type outputErrorTracker struct {
 }
 
 func NewOutputErrorTracker() *outputErrorTracker {
-	return &outputErrorTracker{maxErrors: 5}
+	return &outputErrorTracker{maxErrors: maxOutputErrorsToShow}
 }
 
 func (t *outputErrorTracker) handleError(err error, logger *core.Logger, message string) {

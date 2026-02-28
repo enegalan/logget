@@ -12,6 +12,8 @@ import (
 	"github.com/go-rod/rod/lib/proto"
 )
 
+const msPerSecond = 1000.0
+
 func convertProtoHeaders(headers proto.NetworkHeaders) map[string]string {
 	result := make(map[string]string, len(headers))
 	for k, v := range headers {
@@ -99,8 +101,8 @@ func FormatTiming(ms float64) string {
 	if ms <= 0 {
 		return ""
 	}
-	if ms >= 1000 {
-		return strconv.FormatFloat(ms/1000.0, 'f', 2, 64) + "s"
+	if ms >= msPerSecond {
+		return strconv.FormatFloat(ms/msPerSecond, 'f', 2, 64) + "s"
 	}
 	return strconv.FormatFloat(ms, 'f', 2, 64) + "ms"
 }

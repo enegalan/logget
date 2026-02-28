@@ -13,6 +13,8 @@ import (
 	"logget/src/io"
 )
 
+const separatorWidth = 60
+
 var (
 	logLevelSymbols = map[string]string{
 		"DEBUG":               "🐛",
@@ -170,7 +172,7 @@ func (f *OutputFormatter) FormatSummary(logCount, networkCount int, duration tim
 	return sb.String()
 }
 
-func (f *OutputFormatter) FormatSeparator() string { return f.theme.FormatSeparator("─", 60) + "\n" }
+func (f *OutputFormatter) FormatSeparator() string { return f.theme.FormatSeparator("─", separatorWidth) + "\n" }
 
 func (f *OutputFormatter) FormatSuccessMessage(message string) string {
 	return f.theme.FormatSuccess(message) + "\n"

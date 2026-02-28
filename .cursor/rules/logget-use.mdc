@@ -73,6 +73,24 @@ logget --json --network --cookie "session=abc123" --header "Authorization: Beare
 logget --json --execute "document.title" --quiet --no-color <url>
 ```
 
+### Testing interactions (for AI agents)
+
+Use `--interact` (repeatable) to run actions on the page and capture logs/network that result. Key names match `event.key` (Escape, Tab, Enter, Meta, Control, Control+Enter, etc.).
+
+**Actions:** `click:<selector>`, `focus:<selector>`, `hover:<selector>`, `type:<selector>:<text>`, `select:<selector>:<value>`, `key:<key>` or `key:<selector>:<key>`, `wait:<ms>`.
+
+**Click and check for errors:**
+```bash
+logget --json --logs --network -q --no-color --interact "click:button[type=submit]" --interact "wait:2000" <url>
+```
+
+**Focus, type, select, key:**
+```bash
+logget --json --logs --network -q --no-color --interact "type:#email:user@example.com" --interact "select:#country:ES" --interact "key:Tab" --interact "key:Enter" --interact "wait:2000" <url>
+```
+
+**Interpreting results:** Exit 0 = all interactions ran; inspect `logs` (e.g. level "ERROR") and `network` (status 4xx/5xx) to decide if the flow failed. Exit 1 = interaction failed (e.g. element not found); message on stderr.
+
 ### Output Structure
 
 **Success (exit code 0):**
@@ -112,3 +130,4 @@ logget --json --execute "document.title" --quiet --no-color <url>
 | XHR only | `logget --json --network --xhr --quiet --no-color <url>` |
 | Errors only | `logget --json --network --status "^(4|5)" --quiet --no-color <url>` |
 | Specific domain | `logget --json --network --domain "domain\\.com" --quiet --no-color <url>` |
+| Test interaction (click) | `logget --json --logs --network -q --no-color --interact "click:button" --interact "wait:2000" <url>` |

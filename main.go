@@ -10,6 +10,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	defaultTimeoutMs             = 60000
+	defaultWaitMs                = 100
+	defaultRefreshIntervalMs     = 100
+	defaultFingerprintIntervalMs = 5000
+)
+
 var (
 	showLogs    flags.BoolFlag
 	showNetwork flags.BoolFlag
@@ -40,20 +47,22 @@ var (
 	fingerprintInterval  flags.Milliseconds
 	harOutput            flags.BoolFlag
 
-	xhrOnly       flags.BoolFlag
-	documentOnly  flags.BoolFlag
-	cssOnly       flags.BoolFlag
-	scriptOnly    flags.BoolFlag
-	fontOnly      flags.BoolFlag
-	imgOnly       flags.BoolFlag
-	mediaOnly     flags.BoolFlag
-	manifestOnly  flags.BoolFlag
-	websocketOnly flags.BoolFlag
-	noColor       flags.BoolFlag
-	quiet         flags.BoolFlag
-	minSize       flags.SizeBytes
-	maxSize       flags.SizeBytes
-	executeJS     flags.SimpleFlag[string]
+	xhrOnly              flags.BoolFlag
+	documentOnly         flags.BoolFlag
+	cssOnly              flags.BoolFlag
+	scriptOnly           flags.BoolFlag
+	fontOnly             flags.BoolFlag
+	imgOnly              flags.BoolFlag
+	mediaOnly            flags.BoolFlag
+	manifestOnly         flags.BoolFlag
+	websocketOnly        flags.BoolFlag
+	noColor              flags.BoolFlag
+	quiet                flags.BoolFlag
+	minSize              flags.SizeBytes
+	maxSize              flags.SizeBytes
+	executeJS            flags.SimpleFlag[string]
+	interactions         flags.InteractArray
+	waitAfterInteraction flags.Milliseconds
 )
 
 func main() {
@@ -102,10 +111,10 @@ func initFlags(cmd *cobra.Command) {
 		{Flag: &quiet, Name: "quiet", Short: "q", Desc: "Suppress progress messages, only show data", Value: false},
 		{Flag: &noRotateFingerprints, Name: "no-rotate-fingerprints", Short: "", Desc: "Disable fingerprint rotation (default: enabled)", Value: false},
 		{Flag: &harOutput, Name: "har", Short: "", Desc: "Output in HAR (HTTP Archive) format", Value: false},
-		{Flag: &timeout, Name: "timeout", Short: "T", Desc: "Timeout in milliseconds", Value: 60000},
-		{Flag: &wait, Name: "wait", Short: "W", Desc: "Wait time in milliseconds after page load", Value: 100},
-		{Flag: &refreshInterval, Name: "refresh", Short: "", Desc: "Refresh interval in milliseconds for real-time streaming", Value: 100},
-		{Flag: &fingerprintInterval, Name: "fingerprint-interval", Short: "", Desc: "Interval in milliseconds for fingerprint rotation", Value: 5000},
+		{Flag: &timeout, Name: "timeout", Short: "T", Desc: "Timeout in milliseconds", Value: defaultTimeoutMs},
+		{Flag: &wait, Name: "wait", Short: "W", Desc: "Wait time in milliseconds after page load", Value: defaultWaitMs},
+		{Flag: &refreshInterval, Name: "refresh", Short: "", Desc: "Refresh interval in milliseconds for real-time streaming", Value: defaultRefreshIntervalMs},
+		{Flag: &fingerprintInterval, Name: "fingerprint-interval", Short: "", Desc: "Interval in milliseconds for fingerprint rotation", Value: defaultFingerprintIntervalMs},
 		{Flag: &userAgent, Name: "user-agent", Short: "A", Desc: "Set User-Agent header", Value: "logget/1.0"},
 		{Flag: &outputFile, Name: "output", Short: "o", Desc: "Write to file instead of stdout", Value: ""},
 		{Flag: &filterPattern, Name: "filter", Short: "", Desc: "Show only logs/requests matching this regex pattern", Value: ""},
@@ -118,6 +127,8 @@ func initFlags(cmd *cobra.Command) {
 		{Flag: &minSize, Name: "min-size", Short: "", Desc: "Only include requests whose size is at least this many bytes", Value: int64(0)},
 		{Flag: &maxSize, Name: "max-size", Short: "", Desc: "Only include requests whose size is at most this many bytes", Value: int64(0)},
 		{Flag: &executeJS, Name: "execute", Short: "e", Desc: "Execute JavaScript code in the page context (can be code or file path)", Value: ""},
+		{Flag: &interactions, Name: "interact", Short: "I", Desc: "Run a page interaction (click, focus, hover, type, select, key, wait); repeatable", Value: []string{}},
+		{Flag: &waitAfterInteraction, Name: "wait-after-interaction", Short: "", Desc: "Wait time in milliseconds after the last interaction", Value: 0},
 	}
 	for _, f := range allFlags {
 		flags.RegisterFlag(cmd, f)
@@ -134,46 +145,48 @@ func runLogget(cmd *cobra.Command, args []string) {
 		url = args[0]
 	}
 	cfg := command.Config{
-		ShowLogs:            showLogs.Get(),
-		ShowNetwork:         showNetwork.Get(),
-		JSONOutput:          jsonOutput.Get(),
-		YAMLOutput:          yamlOutput.Get(),
-		CSVOutput:           csvOutput.Get(),
-		Timeout:             timeout.Get(),
-		Wait:                wait.Get(),
-		UserAgent:           userAgent.Get(),
-		Headers:             headers.Get(),
-		Cookies:             cookies.Get(),
-		VersionFlag:         versionFlag.Get(),
-		Verbose:             verbose.Get(),
-		OutputFile:          outputFile.Get(),
-		AppendMode:          appendMode.Get(),
-		Version:             version,
-		FollowMode:          followMode.Get(),
-		FilterPattern:       filterPattern.Get(),
-		ExcludePattern:      excludePattern.Get(),
-		StatusPattern:       statusPattern.Get(),
-		DomainPattern:       domainPattern.Get(),
-		MimePattern:         mimePattern.Get(),
-		RefreshInterval:     refreshInterval.Get(),
-		SkipSSLVerify:       skipSSLVerify.Get(),
-		RotateFingerprints:  !noRotateFingerprints.Get(),
-		FingerprintInterval: fingerprintInterval.Get(),
-		HAROutput:           harOutput.Get(),
-		XHROnly:             xhrOnly.Get(),
-		DocumentOnly:        documentOnly.Get(),
-		CssOnly:             cssOnly.Get(),
-		ScriptOnly:          scriptOnly.Get(),
-		FontOnly:            fontOnly.Get(),
-		ImgOnly:             imgOnly.Get(),
-		MediaOnly:           mediaOnly.Get(),
-		ManifestOnly:        manifestOnly.Get(),
-		WebSocketOnly:       websocketOnly.Get(),
-		NoColor:             noColor.Get(),
-		Quiet:               quiet.Get(),
-		MinSize:             minSize.Get(),
-		MaxSize:             maxSize.Get(),
-		ExecuteJS:           executeJS.Get(),
+		ShowLogs:             showLogs.Get(),
+		ShowNetwork:          showNetwork.Get(),
+		JSONOutput:           jsonOutput.Get(),
+		YAMLOutput:           yamlOutput.Get(),
+		CSVOutput:            csvOutput.Get(),
+		Timeout:              timeout.Get(),
+		Wait:                 wait.Get(),
+		UserAgent:            userAgent.Get(),
+		Headers:              headers.Get(),
+		Cookies:              cookies.Get(),
+		VersionFlag:          versionFlag.Get(),
+		Verbose:              verbose.Get(),
+		OutputFile:           outputFile.Get(),
+		AppendMode:           appendMode.Get(),
+		Version:              version,
+		FollowMode:           followMode.Get(),
+		FilterPattern:        filterPattern.Get(),
+		ExcludePattern:       excludePattern.Get(),
+		StatusPattern:        statusPattern.Get(),
+		DomainPattern:        domainPattern.Get(),
+		MimePattern:          mimePattern.Get(),
+		RefreshInterval:      refreshInterval.Get(),
+		SkipSSLVerify:        skipSSLVerify.Get(),
+		RotateFingerprints:   !noRotateFingerprints.Get(),
+		FingerprintInterval:  fingerprintInterval.Get(),
+		HAROutput:            harOutput.Get(),
+		XHROnly:              xhrOnly.Get(),
+		DocumentOnly:         documentOnly.Get(),
+		CssOnly:              cssOnly.Get(),
+		ScriptOnly:           scriptOnly.Get(),
+		FontOnly:             fontOnly.Get(),
+		ImgOnly:              imgOnly.Get(),
+		MediaOnly:            mediaOnly.Get(),
+		ManifestOnly:         manifestOnly.Get(),
+		WebSocketOnly:        websocketOnly.Get(),
+		NoColor:              noColor.Get(),
+		Quiet:                quiet.Get(),
+		MinSize:              minSize.Get(),
+		MaxSize:              maxSize.Get(),
+		ExecuteJS:            executeJS.Get(),
+		Interactions:         interactions.Get(),
+		WaitAfterInteraction: waitAfterInteraction.Get(),
 	}
 	command.RunLogget(cfg, url)
 }

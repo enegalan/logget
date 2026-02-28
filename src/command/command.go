@@ -20,6 +20,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const defaultWaitAfterInteractionMs = 300
+
 func RunLogget(cfg Config, url string) {
 	logger, formatter, cfg := initCommand(cfg, url)
 	chromeCtx, chromeCancel, url := setupChromeContext(cfg, url, logger)
@@ -190,6 +192,16 @@ func runNormalMode(chromeCtx *chrome.ChromeContext, cfg Config, url string, stat
 		} else {
 			outputJSResult(result, cfg, logger)
 		}
+	}
+	if len(cfg.Interactions) > 0 {
+		if err := core.RunInteractions(chromeCtx, cfg.Interactions); err != nil {
+			logger.Fatal("%v", err)
+		}
+		waitMs := cfg.WaitAfterInteraction
+		if waitMs <= 0 {
+			waitMs = defaultWaitAfterInteractionMs
+		}
+		time.Sleep(time.Duration(waitMs) * time.Millisecond)
 	}
 	logger.Success("Successfully loaded page: %s", url)
 	statusCode := state.responseStatusCode
